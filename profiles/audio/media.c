@@ -42,6 +42,7 @@
 #include "media.h"
 #include "transport.h"
 #include "a2dp.h"
+#include "asha.h"
 #include "avrcp.h"
 
 #define MEDIA_INTERFACE "org.bluez.Media1"
@@ -81,6 +82,7 @@ struct endpoint_request {
 
 struct media_endpoint {
 	struct a2dp_sep		*sep;
+	struct asha_central *asha_central;
 	char			*sender;	/* Endpoint DBus bus id */
 	char			*path;		/* Endpoint object path */
 	char			*uuid;		/* Endpoint property UUID */
@@ -330,7 +332,7 @@ static void endpoint_reply(DBusPendingCall *call, void *user_data)
 
 		ret = configuration;
 		goto done;
-	} else  if (!dbus_message_get_args(reply, &err, DBUS_TYPE_INVALID)) {
+	} else if (!dbus_message_get_args(reply, &err, DBUS_TYPE_INVALID)) {
 		error("Wrong reply signature: %s", err.message);
 		dbus_error_free(&err);
 		goto done;
@@ -476,10 +478,10 @@ static gboolean set_configuration(struct media_endpoint *endpoint,
 					uint8_t *configuration, size_t size,
 					media_endpoint_cb_t cb,
 					void *user_data,
-					GDestroyNotify destroy)
+					GDestroyNotify destroy,
+					const char *remote_endpoint,
+					struct btd_device *device)
 {
-	struct a2dp_config_data *data = user_data;
-	struct btd_device *device = a2dp_setup_get_device(data->setup);
 	DBusConnection *conn = btd_get_dbus_connection();
 	DBusMessage *msg;
 	const char *path;
@@ -493,7 +495,7 @@ static gboolean set_configuration(struct media_endpoint *endpoint,
 		return FALSE;
 
 	transport = media_transport_create(device,
-					a2dp_setup_remote_path(data->setup),
+					remote_endpoint,
 					configuration, size, endpoint);
 	if (transport == NULL)
 		return FALSE;
@@ -521,6 +523,10 @@ static gboolean set_configuration(struct media_endpoint *endpoint,
 
 	return media_endpoint_async_call(msg, endpoint, transport,
 						cb, user_data, destroy);
+}
+
+static gboolean media_endpoint_is_asha(struct media_endpoint *endpoint) {
+	return endpoint->asha_central != NULL;
 }
 
 static void release_endpoint(struct media_endpoint *endpoint)
@@ -626,8 +632,11 @@ static int set_config(struct a2dp_sep *sep, uint8_t *configuration,
 	data->setup = setup;
 	data->cb = cb;
 
+	struct btd_device *device = a2dp_setup_get_device(setup);
+	const char *remote_endpoint = a2dp_setup_remote_path(setup);
+
 	if (set_configuration(endpoint, configuration, length, config_cb, data,
-							g_free) == TRUE)
+							g_free, remote_endpoint, device) == TRUE)
 		return 0;
 
 	g_free(data);
@@ -661,6 +670,14 @@ static struct a2dp_endpoint a2dp_endpoint = {
 	.set_delay = set_delay
 };
 
+static void asha_destroy_endpoint(void *user_data)
+{
+	struct media_endpoint *endpoint = user_data;
+
+	endpoint->asha_central = NULL;
+	release_endpoint(endpoint);
+}
+
 static void a2dp_destroy_endpoint(void *user_data)
 {
 	struct media_endpoint *endpoint = user_data;
@@ -692,6 +709,57 @@ static gboolean endpoint_init_a2dp_sink(struct media_endpoint *endpoint,
 					delay_reporting, &a2dp_endpoint,
 					endpoint, a2dp_destroy_endpoint, err);
 	if (endpoint->sep == NULL)
+		return FALSE;
+
+	return TRUE;
+}
+
+static size_t asha_get_capabilities (struct asha_central *central,
+		uint8_t **capabilities,
+		void *user_data) {
+	return 0;
+}
+
+static void asha_config_cb(struct media_endpoint *endpoint, void *ret, int size,
+							void *user_data)
+{
+	DBG("ASHA set_configuration callback");
+}
+
+size_t asha_set_configuration(struct btd_device *device, struct asha_central *central) {
+	struct media_transport *transport;
+
+	// The media_transport->config is initialized with this value
+	// This is exposed as a property of the transport on dbus
+	uint8_t config = 0x01;
+
+	transport = media_transport_create(device, device_get_path(device), &config, 1, central->user_data);
+	central->transport = transport;
+
+	set_configuration(media_transport_get_endpoint(transport),
+			&config, 1,
+			asha_config_cb,
+			device,
+			g_free,
+			// Internally, transport->path defaults to device path if it can't find
+			// transport->remote_endpoint. We could pass in a NULL to achieve the same
+			// effect, but we are explicit to avoid coupling this with that behaviour.
+			device_get_path(device),
+			device);
+
+	return 0;
+}
+
+static struct asha_endpoint asha_endpoint = {
+	.get_capabilities = asha_get_capabilities,
+	.set_configuration = asha_set_configuration
+};
+
+static gboolean endpoint_init_asha_sink(struct media_endpoint *endpoint, int *err)
+{
+	endpoint->asha_central = asha_add_central(endpoint->adapter->btd_adapter,
+			&asha_endpoint, asha_destroy_endpoint, endpoint, err);
+	if (endpoint->asha_central == NULL)
 		return FALSE;
 
 	return TRUE;
@@ -812,6 +880,9 @@ static struct media_endpoint *media_endpoint_create(struct media_adapter *adapte
 	else if (strcasecmp(uuid, A2DP_SINK_UUID) == 0)
 		succeeded = endpoint_init_a2dp_sink(endpoint,
 							delay_reporting, err);
+	else if (strcasecmp(uuid, ASHA_SINK_UUID) == 0)
+		// make delay_reporting mandatory for asha
+		succeeded = endpoint_init_asha_sink(endpoint, err);
 	else if (strcasecmp(uuid, HFP_AG_UUID) == 0 ||
 					strcasecmp(uuid, HSP_AG_UUID) == 0)
 		succeeded = TRUE;
@@ -1133,7 +1204,7 @@ static void set_repeat_setting(DBusMessageIter *iter, const char *value)
 }
 
 static int media_player_set_setting(const char *key, const char *value,
-				    void *user_data)
+						void *user_data)
 {
 	struct media_player *mp = user_data;
 	const char *iface = MEDIA_PLAYER_INTERFACE;
@@ -1238,7 +1309,7 @@ static uint32_t media_player_get_duration(void *user_data)
 }
 
 static void media_player_set_volume(int8_t volume, struct btd_device *dev,
-				    void *user_data)
+						void *user_data)
 {
 	struct media_player *mp = user_data;
 
@@ -2444,6 +2515,11 @@ void media_unregister(struct btd_adapter *btd_adapter)
 			return;
 		}
 	}
+}
+
+struct asha_central *media_endpoint_get_asha_central(struct media_endpoint *endpoint)
+{
+	return endpoint->asha_central;
 }
 
 struct a2dp_sep *media_endpoint_get_sep(struct media_endpoint *endpoint)

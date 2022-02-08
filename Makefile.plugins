@@ -31,9 +31,12 @@ endif
 
 if A2DP
 builtin_modules += a2dp
+builtin_modules += asha
 builtin_sources += profiles/audio/source.h profiles/audio/source.c \
 			profiles/audio/sink.h profiles/audio/sink.c \
 			profiles/audio/a2dp.h profiles/audio/a2dp.c \
+			profiles/audio/asha.h profiles/audio/asha.c \
+			profiles/audio/asha/transport.h profiles/audio/asha/transport.c \
 			profiles/audio/avdtp.h profiles/audio/avdtp.c \
 			profiles/audio/media.h profiles/audio/media.c \
 			profiles/audio/transport.h profiles/audio/transport.c \

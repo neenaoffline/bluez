@@ -15,6 +15,7 @@ import bluezutils
 
 A2DP_SOURCE_UUID = "0000110A-0000-1000-8000-00805F9B34FB"
 A2DP_SINK_UUID = "0000110B-0000-1000-8000-00805F9B34FB"
+ASHA_SINK_UUID = "0000FDF0-0000-1000-8000-00805F9B34FB"
 HFP_AG_UUID = "0000111F-0000-1000-8000-00805F9B34FB"
 HFP_HF_UUID = "0000111E-0000-1000-8000-00805F9B34FB"
 HSP_AG_UUID = "00001112-0000-1000-8000-00805F9B34FB"
@@ -45,6 +46,9 @@ PCM_CODEC = dbus.Byte(0x00)
 PCM_CONFIGURATION = dbus.Array([], signature="ay")
 
 CVSD_CODEC = dbus.Byte(0x01)
+
+G722_CODEC = dbus.Byte(0x01)
+ASHA_CAPABILITIES = dbus.Array([], signature="ay")
 
 class Rejected(dbus.DBusException):
 	_dbus_error_name = "org.bluez.Error.Rejected"
@@ -106,6 +110,11 @@ if __name__ == '__main__':
 					"Capabilities" : SBC_CAPABILITIES })
 
 	if len(sys.argv) > 2:
+		if sys.argv[2] == "ashasink":
+			properties = dbus.Dictionary({ "UUID" : ASHA_SINK_UUID,
+							"Codec" : G722_CODEC,
+							"DelayReporting" : True,
+							"Capabilities" : ASHA_CAPABILITIES })
 		if sys.argv[2] == "sbcsink":
 			properties = dbus.Dictionary({ "UUID" : A2DP_SINK_UUID,
 							"Codec" : SBC_CODEC,

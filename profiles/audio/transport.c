@@ -35,20 +35,13 @@
 #include "avdtp.h"
 #include "media.h"
 #include "transport.h"
+#include "asha/transport.h"
 #include "a2dp.h"
 #include "sink.h"
 #include "source.h"
 #include "avrcp.h"
 
 #define MEDIA_TRANSPORT_INTERFACE "org.bluez.MediaTransport1"
-
-typedef enum {
-	TRANSPORT_STATE_IDLE,		/* Not acquired and suspended */
-	TRANSPORT_STATE_PENDING,	/* Playing but not acquired */
-	TRANSPORT_STATE_REQUESTING,	/* Acquire in progress */
-	TRANSPORT_STATE_ACTIVE,		/* Acquired and playing */
-	TRANSPORT_STATE_SUSPENDING,     /* Release in progress */
-} transport_state_t;
 
 static char *str_state[] = {
 	"TRANSPORT_STATE_IDLE",
@@ -74,31 +67,6 @@ struct a2dp_transport {
 	struct avdtp		*session;
 	uint16_t		delay;
 	int8_t			volume;
-};
-
-struct media_transport {
-	char			*path;		/* Transport object path */
-	struct btd_device	*device;	/* Transport device */
-	const char		*remote_endpoint; /* Transport remote SEP */
-	struct media_endpoint	*endpoint;	/* Transport endpoint */
-	struct media_owner	*owner;		/* Transport owner */
-	uint8_t			*configuration; /* Transport configuration */
-	int			size;		/* Transport configuration size */
-	int			fd;		/* Transport file descriptor */
-	uint16_t		imtu;		/* Transport input mtu */
-	uint16_t		omtu;		/* Transport output mtu */
-	transport_state_t	state;
-	guint			hs_watch;
-	guint			source_watch;
-	guint			sink_watch;
-	guint			(*resume) (struct media_transport *transport,
-					struct media_owner *owner);
-	guint			(*suspend) (struct media_transport *transport,
-					struct media_owner *owner);
-	void			(*cancel) (struct media_transport *transport,
-								guint id);
-	GDestroyNotify		destroy;
-	void			*data;
 };
 
 static GSList *transports = NULL;
@@ -597,10 +565,26 @@ static gboolean get_state(const GDBusPropertyTable *property,
 	return TRUE;
 }
 
+typedef enum {
+	TRANSPORT_A2DP,
+	TRANSPORT_ASHA
+} transport_type_t;
+
+static transport_type_t media_transport_is_asha(struct media_transport *transport) {
+	if (media_endpoint_get_asha_central(transport->endpoint) != NULL) {
+		return TRANSPORT_ASHA;
+	}
+
+	return TRANSPORT_A2DP;
+}
+
 static gboolean delay_exists(const GDBusPropertyTable *property, void *data)
 {
 	struct media_transport *transport = data;
 	struct a2dp_transport *a2dp = transport->data;
+
+  if (TRANSPORT_ASHA == media_transport_is_asha(transport))
+    return FALSE;
 
 	return a2dp->delay != 0;
 }
@@ -620,6 +604,9 @@ static gboolean volume_exists(const GDBusPropertyTable *property, void *data)
 {
 	struct media_transport *transport = data;
 	struct a2dp_transport *a2dp = transport->data;
+
+  if (TRANSPORT_ASHA == media_transport_is_asha(transport))
+    return FALSE;
 
 	return a2dp->volume >= 0;
 }
@@ -871,6 +858,9 @@ struct media_transport *media_transport_create(struct btd_device *device,
 	} else if (strcasecmp(uuid, A2DP_SINK_UUID) == 0) {
 		if (media_transport_init_sink(transport) < 0)
 			goto fail;
+	} else if (strcasecmp(uuid, ASHA_SINK_UUID) == 0) {
+		if (asha_transport_init(transport) < 0)
+			goto fail;
 	} else
 		goto fail;
 
@@ -980,3 +970,8 @@ void media_transport_update_device_volume(struct btd_device *dev,
 			media_transport_update_volume(transport, volume);
 	}
 }
+
+struct media_endpoint *media_transport_get_endpoint(struct media_transport *transport) {
+  return transport->endpoint;
+}
+
