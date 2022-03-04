@@ -14,6 +14,7 @@
 
 #include "lib/sdp.h"
 #include "lib/uuid.h"
+#include "lib/bluetooth.h"
 
 #include "gdbus/gdbus.h"
 
@@ -22,6 +23,7 @@
 #include "src/log.h"
 #include "profiles/audio/media.h"
 #include "profiles/audio/transport.h"
+#include "profiles/audio/asha.h"
 
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/l2cap.h>
@@ -51,6 +53,79 @@ static unsigned int cb_id = 1;
  * Looks like all behaviour is queued up for executing when the mainloop is idle
  * using g_idle_add. We shall do this as well.
  */
+static void set_mtu(int s, int mtu)
+{
+	struct l2cap_options opts = { 0 };
+	int err = 0;
+	unsigned int size = sizeof(opts.imtu);
+
+	opts.omtu = opts.imtu = mtu;
+	DBG("Setting sockopts\n");
+
+	err = setsockopt(s, SOL_BLUETOOTH, BT_RCVMTU, &opts.imtu, size);
+	if (err) {
+		DBG("Unable to set recv mtu. %s (%d)\n", strerror(errno),
+		    errno);
+	} else {
+		DBG("Set recv mtu\n");
+	}
+
+	err = setsockopt(s, SOL_BLUETOOTH, BT_SNDMTU, &opts.imtu, size);
+	if (err) {
+		DBG("Unable to set send mtu. %s (%d)\n", strerror(errno),
+		    errno);
+	} else {
+		DBG("Set send mtu\n");
+	}
+}
+
+#define MTU 167
+static int xyz_connect(bdaddr_t *bd_addr, uint16_t psm)
+{
+	int s = socket(PF_BLUETOOTH, SOCK_SEQPACKET, BTPROTO_L2CAP);
+	int status = -1;
+
+	if (s == -1) {
+		DBG("L2CAP: Could not create a socket %u. %s (%d)\n", psm,
+		    strerror(errno), errno);
+		return -1;
+	}
+
+	DBG("L2CAP: Created socket %u\n", psm);
+
+	struct sockaddr_l2 addr = { 0 };
+	addr.l2_family = AF_BLUETOOTH;
+	addr.l2_bdaddr_type = BDADDR_LE_PUBLIC;
+
+	// Currently need to bind before connect to workaround an issue where the
+	// addr type is incorrectly set otherwise
+
+	status = bind(s, (struct sockaddr *)&addr, sizeof(addr));
+
+	if (status < 0) {
+		DBG("L2CAP: Could not bind %s\n", strerror(errno));
+		return -1;
+	}
+
+	DBG("L2CAP: socket bound\n");
+
+	addr.l2_psm = htobs(psm);
+	memcpy(bd_addr, &addr.l2_bdaddr, sizeof(bdaddr_t));
+	set_mtu(s, MTU);
+
+	status = connect(s, (struct sockaddr *)&addr, sizeof(addr));
+
+	if (status == 0) {
+		DBG("L2CAP: Connected to %u\n", psm);
+	} else {
+		DBG("L2CAP: Could not connect to %u. Error %d. %d (%s)\n", psm,
+		    status, errno, strerror(errno));
+		return -1;
+	}
+
+	return s;
+}
+
 static guint resume_asha(struct media_transport *transport,
 			 struct media_owner *owner)
 {
@@ -58,6 +133,23 @@ static guint resume_asha(struct media_transport *transport,
 	struct media_endpoint *endpoint = transport->endpoint;
 	struct asha_central *asha_central =
 		media_endpoint_get_asha_central(endpoint);
+	uint16_t psm;
+
+	const bdaddr_t *addr = device_get_address(transport->device);
+
+	if (!asha_get_psm(transport->device, &psm)) {
+		DBG("Cannot read PSM");
+		return 0;
+	}
+	if (addr == NULL) {
+		DBG("Cannot read bd addr");
+		return 0;
+	}
+
+	// continue here
+	transport_set_state(transport, TRANSPORT_STATE_REQUESTING);
+
+	xyz_connect((bdaddr_t *)addr, psm);
 
 	DBG("ASHA Transport Resume");
 

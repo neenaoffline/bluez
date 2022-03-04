@@ -102,7 +102,7 @@ static gboolean state_in_use(transport_state_t state)
 	return FALSE;
 }
 
-static void transport_set_state(struct media_transport *transport,
+void transport_set_state(struct media_transport *transport,
 							transport_state_t state)
 {
 	transport_state_t old_state = transport->state;

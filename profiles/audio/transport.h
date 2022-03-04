@@ -58,6 +58,8 @@ void media_transport_update_volume(struct media_transport *transport,
 								int8_t volume);
 void transport_get_properties(struct media_transport *transport,
 							DBusMessageIter *iter);
+void transport_set_state(struct media_transport *transport,
+							transport_state_t state);
 
 int8_t media_transport_get_device_volume(struct btd_device *dev);
 void media_transport_update_device_volume(struct btd_device *dev,

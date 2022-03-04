@@ -53,49 +53,6 @@
 #define ASHA_CHARACTERISTIC_READ_ONLY_PROPERTIES                               \
 	"6333651e-c481-4a3e-9169-7c902aad37bb"
 
-struct asha_device_capabilities {
-	uint8_t side : 1;
-	uint8_t type : 1;
-	uint8_t reserved : 6;
-};
-
-struct asha_feature_map {
-	uint8_t coc_streaming_supported : 1;
-	uint8_t reserved : 7;
-};
-
-struct asha_supported_codecs {
-	uint8_t reserved : 1;
-	uint8_t g722 : 1;
-	uint16_t also_reserved : 14;
-};
-
-struct asha_ro_properties {
-	uint8_t version;
-	struct asha_device_capabilities device_capabilities;
-	uint64_t hi_sync_id;
-	struct asha_feature_map feature_map;
-	uint16_t render_delay;
-	uint16_t reserved;
-	struct asha_supported_codecs supported_codecs;
-};
-
-struct asha {
-	struct btd_device *device;
-	struct gatt_db *db;
-	struct bt_gatt_client *client;
-	struct gatt_db_attribute *svc_attr;
-
-	uint16_t psm_handle;
-	uint16_t ro_properties_handle;
-	uint16_t audio_control_point_handle;
-	uint16_t audio_status_handle;
-	uint16_t volume_handle;
-
-	struct asha_ro_properties *ro_properties;
-	uint16_t *psm;
-};
-
 static GSList *centrals = NULL;
 
 static struct asha_central *find_central(GSList *list, struct btd_adapter *a)
@@ -305,6 +262,22 @@ static void foreach_asha_service(struct gatt_db_attribute *attr,
 
 	asha->svc_attr = attr;
 	handle_asha_service(asha);
+}
+
+gboolean asha_get_psm(struct btd_device *asha_device, uint16_t *psm)
+{
+	struct btd_service *service =
+		btd_device_get_service(asha_device, ASHA_SINK_UUID);
+	if (service == NULL)
+		return FALSE;
+
+	struct asha *asha = btd_service_get_user_data(service);
+	if ((asha == NULL) || (asha->psm == NULL))
+		return FALSE;
+
+	memcpy(psm, asha->psm, sizeof(uint16_t));
+
+	return TRUE;
 }
 
 static int asha_accept(struct btd_service *service)
