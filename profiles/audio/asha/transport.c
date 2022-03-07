@@ -21,6 +21,7 @@
 #include "src/adapter.h"
 #include "src/device.h"
 #include "src/log.h"
+#include "src/shared/gatt-client.h"
 #include "profiles/audio/media.h"
 #include "profiles/audio/transport.h"
 #include "profiles/audio/asha.h"
@@ -126,6 +127,21 @@ static int xyz_connect(bdaddr_t *bd_addr, uint16_t psm)
 	return s;
 }
 
+static void send_audio_control_point_cb(bool success, uint8_t att_ecode,
+					const uint8_t *value, uint16_t length,
+					void *user_data)
+{
+	struct asha *asha = user_data;
+
+	if (!success) {
+		DBG("Writing control point failed with ATT error: %u",
+		    att_ecode);
+		return;
+	}
+
+	DBG("Control point written: %u", att_ecode);
+}
+
 static guint resume_asha(struct media_transport *transport,
 			 struct media_owner *owner)
 {
@@ -141,16 +157,20 @@ static guint resume_asha(struct media_transport *transport,
 		DBG("Cannot read PSM");
 		return 0;
 	}
+
 	if (addr == NULL) {
 		DBG("Cannot read bd addr");
 		return 0;
 	}
 
-	// continue here
 	transport_set_state(transport, TRANSPORT_STATE_REQUESTING);
 
-	xyz_connect((bdaddr_t *)addr, psm);
+	// TODO: Do the following in a g_idle_add call
+	int fd = xyz_connect((bdaddr_t *)addr, psm);
+	media_transport_set_fd(transport, fd, MTU, MTU);
+	send_audio_control_point_start(asha, send_audio_control_point_cb);
 
+	transport_set_state(transport, TRANSPORT_STATE_ACTIVE);
 	DBG("ASHA Transport Resume");
 
 	return cb_id++;
@@ -185,11 +205,23 @@ static guint resume_asha(struct media_transport *transport,
 static guint suspend_asha(struct media_transport *transport,
 			  struct media_owner *owner)
 {
+	struct asha_transport *asha = transport->data;
+
+	if (transport->state != TRANSPORT_STATE_ACTIVE) {
+		return 0;
+	}
+
+	close(transport->fd);
+	send_audio_control_point_stop(asha, send_audio_control_point_cb);
+	return 0;
 }
 
 /*
  * Cancel searches all setups' callbacks for the callback with this id and then
  * cancels it (abort & free)
+ *
+ * Since we don't have any callbacks, maybe we don't need to do anything here?
+ * (We just immediately open a socket synchronously)
  */
 static void cancel_asha(struct media_transport *transport, guint id)
 {

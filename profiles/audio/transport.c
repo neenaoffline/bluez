@@ -225,7 +225,7 @@ static void media_transport_remove_owner(struct media_transport *transport)
 		transport->suspend(transport, NULL);
 }
 
-static gboolean media_transport_set_fd(struct media_transport *transport,
+gboolean media_transport_set_fd(struct media_transport *transport,
 					int fd, uint16_t imtu, uint16_t omtu)
 {
 	if (transport->fd == fd)

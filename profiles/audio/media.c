@@ -37,6 +37,7 @@
 #include "src/error.h"
 #include "src/shared/util.h"
 #include "src/shared/queue.h"
+#include "src/shared/gatt-client.h"
 
 #include "avdtp.h"
 #include "media.h"

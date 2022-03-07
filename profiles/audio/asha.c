@@ -104,6 +104,39 @@ static void asha_remove(struct btd_service *service)
 	return;
 }
 
+enum AudioControlPoint { START = 0x01, STOP = 0x02, STATUS = 0x03 };
+enum Codec { G722_16K_HZ = 0x01 };
+enum AudioType { UNKNOWN = 0, RINGTONE = 1, PHONECALL = 2, MEDIA = 3 };
+enum OtherState { OTHER_DISCONNECTED = 0, OTHER_CONNECTED = 1 };
+
+static void write_audio_control_point(struct asha *asha,
+				      bt_gatt_client_callback_t callback,
+				      int8_t data[], int16_t length)
+{
+	int ret =
+		bt_gatt_client_write_value(asha->client,
+					   asha->audio_control_point_handle,
+					   data, length, callback, asha, NULL);
+}
+
+void send_audio_control_point_start(struct asha *asha,
+				    bt_gatt_client_callback_t callback)
+{
+	int8_t data[] = { START, G722_16K_HZ, UNKNOWN, 0, OTHER_DISCONNECTED };
+	int16_t length = 5;
+
+	write_audio_control_point(asha, callback, data, length);
+}
+
+void send_audio_control_point_stop(struct asha *asha,
+				   bt_gatt_client_callback_t callback)
+{
+	int8_t data[] = { STOP };
+	int16_t length = 1;
+
+	write_audio_control_point(asha, callback, data, length);
+}
+
 static void debug_log_ro_properties(struct asha_ro_properties *ro_properties)
 {
 	uint8_t *ro_properties_bytes = (uint8_t *)ro_properties;

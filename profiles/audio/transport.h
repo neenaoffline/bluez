@@ -56,6 +56,8 @@ void media_transport_update_delay(struct media_transport *transport,
 							uint16_t delay);
 void media_transport_update_volume(struct media_transport *transport,
 								int8_t volume);
+gboolean media_transport_set_fd(struct media_transport *transport,
+					int fd, uint16_t imtu, uint16_t omtu);
 void transport_get_properties(struct media_transport *transport,
 							DBusMessageIter *iter);
 void transport_set_state(struct media_transport *transport,
