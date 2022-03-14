@@ -83,6 +83,9 @@ static void set_mtu(int s, int mtu)
 #define MTU 167
 static int xyz_connect(bdaddr_t *bd_addr, uint16_t psm)
 {
+	char addrstr[100];
+	ba2str(bd_addr, addrstr);
+	DBG("XYZ Addr: %s", addrstr);
 	int s = socket(PF_BLUETOOTH, SOCK_SEQPACKET, BTPROTO_L2CAP);
 	int status = -1;
 
@@ -151,7 +154,9 @@ static guint resume_asha(struct media_transport *transport,
 		media_endpoint_get_asha_central(endpoint);
 	uint16_t psm;
 
+	char addrstr[100];
 	const bdaddr_t *addr = device_get_address(transport->device);
+	ba2str(addr, addrstr);
 
 	if (!asha_get_psm(transport->device, &psm)) {
 		DBG("Cannot read PSM");
@@ -163,6 +168,7 @@ static guint resume_asha(struct media_transport *transport,
 		return 0;
 	}
 
+	DBG("XYZ Addr: %s", addrstr);
 	transport_set_state(transport, TRANSPORT_STATE_REQUESTING);
 
 	// TODO: Do the following in a g_idle_add call

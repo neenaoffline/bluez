@@ -87,7 +87,11 @@ struct asha_central *asha_add_central(struct btd_adapter *adapter,
 static int asha_probe(struct btd_service *service)
 {
 	// get the device from the service
+	char addrstr[100];
 	struct btd_device *device = btd_service_get_device(service);
+	const bdaddr_t *addr = device_get_address(device);
+	ba2str(addr, addrstr);
+	DBG("\nPROBE Addr: %s\n", addrstr);
 
 	struct asha *asha = g_new0(struct asha, 1);
 
