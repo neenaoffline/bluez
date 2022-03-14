@@ -95,7 +95,7 @@ static int asha_probe(struct btd_service *service)
 
 	struct asha *asha = g_new0(struct asha, 1);
 
-	asha->device = device;
+	asha->device = btd_device_ref(device);
 
 	btd_service_set_user_data(service, asha);
 
@@ -105,6 +105,18 @@ static int asha_probe(struct btd_service *service)
 
 static void asha_remove(struct btd_service *service)
 {
+	struct asha *asha = btd_service_get_user_data(service);
+
+	gatt_db_unref(asha->db);
+	bt_gatt_client_unref(asha->client);
+	btd_device_unref(asha->device);
+	/*
+	free(batt->initial_value);
+	if (batt->battery)
+		btd_battery_unregister(batt->battery);
+	g_free(batt);
+  */
+
 	return;
 }
 

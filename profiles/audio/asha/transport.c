@@ -20,6 +20,7 @@
 
 #include "src/adapter.h"
 #include "src/device.h"
+#include "src/service.h"
 #include "src/log.h"
 #include "src/shared/gatt-client.h"
 #include "profiles/audio/media.h"
@@ -35,6 +36,7 @@
 #include <unistd.h>
 
 struct asha_transport {
+	struct asha *asha;
 };
 
 // matching what a2dp.c is doing with cb_id for now Which is, just have a new
@@ -114,7 +116,7 @@ static int xyz_connect(bdaddr_t *bd_addr, uint16_t psm)
 	DBG("L2CAP: socket bound\n");
 
 	addr.l2_psm = htobs(psm);
-	memcpy(bd_addr, &addr.l2_bdaddr, sizeof(bdaddr_t));
+	memcpy(&addr.l2_bdaddr, bd_addr, sizeof(bdaddr_t));
 	set_mtu(s, MTU);
 
 	status = connect(s, (struct sockaddr *)&addr, sizeof(addr));
@@ -148,7 +150,8 @@ static void send_audio_control_point_cb(bool success, uint8_t att_ecode,
 static guint resume_asha(struct media_transport *transport,
 			 struct media_owner *owner)
 {
-	struct asha_transport *asha = transport->data;
+	struct asha_transport *asha_transport = transport->data;
+	struct asha *asha = asha_transport->asha;
 	struct media_endpoint *endpoint = transport->endpoint;
 	struct asha_central *asha_central =
 		media_endpoint_get_asha_central(endpoint);
@@ -211,14 +214,15 @@ static guint resume_asha(struct media_transport *transport,
 static guint suspend_asha(struct media_transport *transport,
 			  struct media_owner *owner)
 {
-	struct asha_transport *asha = transport->data;
+	struct asha_transport *asha_transport = transport->data;
 
 	if (transport->state != TRANSPORT_STATE_ACTIVE) {
 		return 0;
 	}
 
 	close(transport->fd);
-	send_audio_control_point_stop(asha, send_audio_control_point_cb);
+	send_audio_control_point_stop(asha_transport->asha,
+				      send_audio_control_point_cb);
 	return 0;
 }
 
@@ -244,18 +248,19 @@ static void destroy_asha(void *data)
 int asha_transport_init(struct media_transport *transport)
 {
 	struct btd_service *service;
-	struct asha_transport *asha;
+	struct asha_transport *asha_transport;
 
 	DBG("ASHA Transport Init");
 	service = btd_device_get_service(transport->device, ASHA_SINK_UUID);
 	if (service == NULL)
 		return -EINVAL;
 
-	asha = g_new0(struct asha_transport, 1);
+	asha_transport = g_new0(struct asha_transport, 1);
+	asha_transport->asha = btd_service_get_user_data(service);
 
 	transport->resume = resume_asha;
 	transport->suspend = suspend_asha;
 	transport->cancel = cancel_asha;
-	transport->data = asha;
+	transport->data = asha_transport;
 	transport->destroy = destroy_asha;
 }
