@@ -172,9 +172,13 @@ static void debug_log_ro_properties(struct asha_ro_properties *ro_properties)
 	DBG("HiSync ID: %lu\n", ro_properties->hi_sync_id);
 	DBG("Feature map: %u\n",
 	    ro_properties->feature_map.coc_streaming_supported);
-	DBG("Render delay: %u\n", ro_properties->render_delay);
-	DBG("Reserved: %u\n", ro_properties->reserved);
-	DBG("Supported Codecs: %u\n", ro_properties->supported_codecs.g722);
+	/*
+   * Commenting this since I can't figure out the format specifier for uint16_t
+   *
+	DBG("Render delay: %hu\n", ro_properties->render_delay);
+	DBG("Reserved: %hu\n", ro_properties->reserved);
+	DBG("Supported Codecs: %hu\n", ro_properties->supported_codecs.g722);
+  */
 }
 
 static void read_ro_properties_cb(bool success, uint8_t att_ecode,
