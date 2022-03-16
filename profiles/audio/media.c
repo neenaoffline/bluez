@@ -737,16 +737,13 @@ size_t asha_set_configuration(struct btd_device *device, struct asha_central *ce
 	transport = media_transport_create(device, device_get_path(device), &config, 1, central->user_data);
 	central->transport = transport;
 
-	set_configuration(media_transport_get_endpoint(transport),
-			&config, 1,
-			asha_config_cb,
-			device,
-			g_free,
-			// Internally, transport->path defaults to device path if it can't find
-			// transport->remote_endpoint. We could pass in a NULL to achieve the same
-			// effect, but we are explicit to avoid coupling this with that behaviour.
-			device_get_path(device),
-			device);
+	set_configuration(
+		media_transport_get_endpoint(transport), &config, 1,
+		asha_config_cb, device, NULL,
+		// Internally, transport->path defaults to device path if it can't find
+		// transport->remote_endpoint. We could pass in a NULL to achieve the same
+		// effect, but we are explicit to avoid coupling this with that behaviour.
+		device_get_path(device), device);
 
 	return 0;
 }
