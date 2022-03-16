@@ -37,6 +37,7 @@
 #include "src/error.h"
 #include "src/shared/util.h"
 #include "src/shared/queue.h"
+#include "src/shared/att.h"
 #include "src/shared/gatt-client.h"
 
 #include "avdtp.h"
@@ -734,12 +735,14 @@ size_t asha_set_configuration(struct btd_device *device, struct asha_central *ce
 	// This is exposed as a property of the transport on dbus
 	uint8_t config = 0x01;
 
-	transport = media_transport_create(device, device_get_path(device), &config, 1, central->user_data);
-	central->transport = transport;
+	transport = media_transport_create(device, device_get_path(device),
+					   &config, 1, central->user_data);
 
 	set_configuration(
-		media_transport_get_endpoint(transport), &config, 1,
-		asha_config_cb, device, NULL,
+		central->user_data, &config, 1, asha_config_cb, device,
+		// This is NULL since we don't want to free the device, since we aren't using
+		// a different struct for this like asha_data
+		NULL,
 		// Internally, transport->path defaults to device path if it can't find
 		// transport->remote_endpoint. We could pass in a NULL to achieve the same
 		// effect, but we are explicit to avoid coupling this with that behaviour.

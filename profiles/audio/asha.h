@@ -56,6 +56,9 @@ struct asha_central {
 
 	void *user_data; // This is the media_endpoint
 
+	// TODO Should be a GSList
+	// TODO This should be used by a watcher that tears down transports
+	// when the correspoinding endpoint goes down
 	struct media_transport *transport;
 };
 

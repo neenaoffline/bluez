@@ -22,6 +22,7 @@
 #include "src/device.h"
 #include "src/service.h"
 #include "src/log.h"
+#include "src/shared/att.h"
 #include "src/shared/gatt-client.h"
 #include "profiles/audio/media.h"
 #include "profiles/audio/transport.h"
@@ -132,8 +133,7 @@ static int xyz_connect(bdaddr_t *bd_addr, uint16_t psm)
 	return s;
 }
 
-static void send_audio_control_point_cb(bool success, uint8_t att_ecode,
-					const uint8_t *value, uint16_t length,
+static void send_audio_control_point_cb(bool success, const uint8_t att_ecode,
 					void *user_data)
 {
 	struct asha *asha = user_data;
