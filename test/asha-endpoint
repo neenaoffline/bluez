@@ -3,14 +3,18 @@
 
 from __future__ import absolute_import, print_function, unicode_literals
 
+import io
+import os
 import sys
+import pdb
 import dbus
 import dbus.service
 import dbus.mainloop.glib
+import time
 try:
-  from gi.repository import GObject
+    from gi.repository import GObject
 except ImportError:
-  import gobject as GObject
+    import gobject as GObject
 import bluezutils
 
 A2DP_SOURCE_UUID = "0000110A-0000-1000-8000-00805F9B34FB"
@@ -21,26 +25,30 @@ HFP_HF_UUID = "0000111E-0000-1000-8000-00805F9B34FB"
 HSP_AG_UUID = "00001112-0000-1000-8000-00805F9B34FB"
 
 SBC_CODEC = dbus.Byte(0x00)
-#Channel Modes: Mono DualChannel Stereo JointStereo
-#Frequencies: 16Khz 32Khz 44.1Khz 48Khz
-#Subbands: 4 8
-#Blocks: 4 8 12 16
-#Bitpool Range: 2-64
-SBC_CAPABILITIES = dbus.Array([dbus.Byte(0xff), dbus.Byte(0xff), dbus.Byte(2), dbus.Byte(64)])
+# Channel Modes: Mono DualChannel Stereo JointStereo
+# Frequencies: 16Khz 32Khz 44.1Khz 48Khz
+# Subbands: 4 8
+# Blocks: 4 8 12 16
+# Bitpool Range: 2-64
+SBC_CAPABILITIES = dbus.Array(
+    [dbus.Byte(0xff), dbus.Byte(0xff), dbus.Byte(2), dbus.Byte(64)])
 # JointStereo 44.1Khz Subbands: Blocks: 16 Bitpool Range: 2-32
-SBC_CONFIGURATION = dbus.Array([dbus.Byte(0x21), dbus.Byte(0x15), dbus.Byte(2), dbus.Byte(32)])
+SBC_CONFIGURATION = dbus.Array(
+    [dbus.Byte(0x21), dbus.Byte(0x15), dbus.Byte(2), dbus.Byte(32)])
 
 MP3_CODEC = dbus.Byte(0x01)
-#Channel Modes: Mono DualChannel Stereo JointStereo
-#Frequencies: 32Khz 44.1Khz 48Khz
+# Channel Modes: Mono DualChannel Stereo JointStereo
+# Frequencies: 32Khz 44.1Khz 48Khz
 #CRC: YES
 #Layer: 3
-#Bit Rate: All except Free format
+# Bit Rate: All except Free format
 #VBR: Yes
-#Payload Format: RFC-2250
-MP3_CAPABILITIES = dbus.Array([dbus.Byte(0x3f), dbus.Byte(0x07), dbus.Byte(0xff), dbus.Byte(0xfe)])
+# Payload Format: RFC-2250
+MP3_CAPABILITIES = dbus.Array(
+    [dbus.Byte(0x3f), dbus.Byte(0x07), dbus.Byte(0xff), dbus.Byte(0xfe)])
 # JointStereo 44.1Khz Layer: 3 Bit Rate: VBR Format: RFC-2250
-MP3_CONFIGURATION = dbus.Array([dbus.Byte(0x21), dbus.Byte(0x02), dbus.Byte(0x00), dbus.Byte(0x80)])
+MP3_CONFIGURATION = dbus.Array(
+    [dbus.Byte(0x21), dbus.Byte(0x02), dbus.Byte(0x00), dbus.Byte(0x80)])
 
 PCM_CODEC = dbus.Byte(0x00)
 PCM_CONFIGURATION = dbus.Array([], signature="ay")
@@ -50,101 +58,138 @@ CVSD_CODEC = dbus.Byte(0x01)
 G722_CODEC = dbus.Byte(0x01)
 ASHA_CAPABILITIES = dbus.Array([], signature="ay")
 
+
 class Rejected(dbus.DBusException):
-	_dbus_error_name = "org.bluez.Error.Rejected"
+    _dbus_error_name = "org.bluez.Error.Rejected"
+
 
 class Endpoint(dbus.service.Object):
-	exit_on_release = True
-	configuration = SBC_CONFIGURATION
+    exit_on_release = True
+    configuration = SBC_CONFIGURATION
 
-	def set_exit_on_release(self, exit_on_release):
-		self.exit_on_release = exit_on_release
+    def set_exit_on_release(self, exit_on_release):
+        self.exit_on_release = exit_on_release
 
-	def default_configuration(self, configuration):
-		self.configuration = configuration
+    def default_configuration(self, configuration):
+        self.configuration = configuration
 
-	@dbus.service.method("org.bluez.MediaEndpoint1",
-					in_signature="", out_signature="")
-	def Release(self):
-		print("Release")
-		if self.exit_on_release:
-			mainloop.quit()
+    @dbus.service.method("org.bluez.MediaEndpoint1",
+                         in_signature="", out_signature="")
+    def Release(self):
+        print("Release")
+        if self.exit_on_release:
+            mainloop.quit()
 
-	@dbus.service.method("org.bluez.MediaEndpoint1",
-					in_signature="o", out_signature="")
-	def ClearConfiguration(self, transport):
-		print("ClearConfiguration (%s)" % (transport))
+    @dbus.service.method("org.bluez.MediaEndpoint1",
+                         in_signature="o", out_signature="")
+    def ClearConfiguration(self, transport):
+        print("ClearConfiguration (%s)" % (transport))
 
-	@dbus.service.method("org.bluez.MediaEndpoint1",
-					in_signature="oay", out_signature="")
-	def SetConfiguration(self, transport, config):
-		print("SetConfiguration (%s, %s)" % (transport, config))
-		print("TRANSPORT: %s" % transport)
-		print("CONFIG: %s" % config)
-		return
+    def start_copying(self, transport_dbus_path):
+        transport = dbus.Interface(bus.get_object("org.bluez", transport_dbus_path),
+                                   "org.bluez.MediaTransport1")
+        file_path = os.environ.get(
+            'ASHA_G722_INPUT') or '/home/neena/work/asymptotic/asha-support/sounds/ikea.g722'
+        tport = transport.Acquire()
+        print("Transport Acquired", transport)
+        asha_copier = AshaCopier(file_path, tport[0])
+        GObject.timeout_add(ASHA_INTERVAL_MS, asha_copier)
 
-	@dbus.service.method("org.bluez.MediaEndpoint1",
-					in_signature="ay", out_signature="ay")
-	def SelectConfiguration(self, caps):
-		print("SelectConfiguration (%s)" % (caps))
-		return self.configuration
+    @dbus.service.method("org.bluez.MediaEndpoint1",
+                         in_signature="oay", out_signature="")
+    def SetConfiguration(self, transport, config):
+        pdb.set_trace()
+        print("SetConfiguration (%s, %s)" % (transport, config))
+        self.start_copying(transport)
+        print("TRANSPORT: %s" % transport)
+        print("CONFIG: %s" % config)
+        return
+
+    @dbus.service.method("org.bluez.MediaEndpoint1",
+                         in_signature="ay", out_signature="ay")
+    def SelectConfiguration(self, caps):
+        print("SelectConfiguration (%s)" % (caps))
+        return self.configuration
+
+
+ASHA_INTERVAL_MS = 20
+
+
+class AshaCopier:
+    MAX_BYTES = 160
+
+    def __init__(self, input_path, output):
+        self.input = open(input_path, 'rb')
+        self.output = output
+        self.bytesio = io.BytesIO()
+        self.buffer = io.BufferedWriter(bytesio)
+        self.counter = 0
+
+    def __call__(self):
+        bs = self.input.read(MAX_BYTES)
+        self.buffer.write(counter.to_bytes(2, sys.byte_order, signed=False))
+        self.buffer.write(bs)
+        written = self.output.write(self.buffer)
+        self.counter = self.counter + 1
+        print("written ", written, " bytes")
+
 
 if __name__ == '__main__':
-	dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
 
-	bus = dbus.SystemBus()
+    bus = dbus.SystemBus()
 
-	if len(sys.argv) > 1:
-		path = bluezutils.find_adapter(sys.argv[1]).object_path
-	else:
-		path = bluezutils.find_adapter().object_path
+    if len(sys.argv) > 1:
+        path = bluezutils.find_adapter(sys.argv[1]).object_path
+    else:
+        path = bluezutils.find_adapter().object_path
 
-	media = dbus.Interface(bus.get_object("org.bluez", path),
-						"org.bluez.Media1")
+    media = dbus.Interface(bus.get_object("org.bluez", path),
+                           "org.bluez.Media1")
 
-	path = "/test/endpoint"
-	endpoint = Endpoint(bus, path)
-	mainloop = GObject.MainLoop()
+    path = "/test/endpoint"
+    endpoint = Endpoint(bus, path)
+    mainloop = GObject.MainLoop()
 
-	properties = dbus.Dictionary({ "UUID" : A2DP_SOURCE_UUID,
-					"Codec" : SBC_CODEC,
-					"DelayReporting" : True,
-					"Capabilities" : SBC_CAPABILITIES })
+    properties = dbus.Dictionary({"UUID": A2DP_SOURCE_UUID,
+                                  "Codec": SBC_CODEC,
+                                  "DelayReporting": True,
+                                  "Capabilities": SBC_CAPABILITIES})
 
-	if len(sys.argv) > 2:
-		if sys.argv[2] == "ashasink":
-			properties = dbus.Dictionary({ "UUID" : ASHA_SINK_UUID,
-							"Codec" : G722_CODEC,
-							"DelayReporting" : True,
-							"Capabilities" : ASHA_CAPABILITIES })
-		if sys.argv[2] == "sbcsink":
-			properties = dbus.Dictionary({ "UUID" : A2DP_SINK_UUID,
-							"Codec" : SBC_CODEC,
-							"DelayReporting" : True,
-							"Capabilities" : SBC_CAPABILITIES })
-		if sys.argv[2] == "mp3source":
-			properties = dbus.Dictionary({ "UUID" : A2DP_SOURCE_UUID,
-							"Codec" : MP3_CODEC,
-							"Capabilities" : MP3_CAPABILITIES })
-			endpoint.default_configuration(MP3_CONFIGURATION)
-		if sys.argv[2] == "mp3sink":
-			properties = dbus.Dictionary({ "UUID" : A2DP_SINK_UUID,
-							"Codec" : MP3_CODEC,
-							"Capabilities" : MP3_CAPABILITIES })
-			endpoint.default_configuration(MP3_CONFIGURATION)
-		if sys.argv[2] == "hfpag" or sys.argv[2] == "hspag":
-			properties = dbus.Dictionary({ "UUID" : HFP_AG_UUID,
-							"Codec" : PCM_CODEC,
-							"Capabilities" :  PCM_CONFIGURATION })
-			endpoint.default_configuration(dbus.Array([]))
-		if sys.argv[2] == "hfphf":
-			properties = dbus.Dictionary({ "UUID" : HFP_HF_UUID,
-							"Codec" : CVSD_CODEC,
-							"Capabilities" :  PCM_CONFIGURATION })
-			endpoint.default_configuration(dbus.Array([]))
+    if len(sys.argv) > 2:
+        if sys.argv[2] == "ashasink":
+            properties = dbus.Dictionary({"UUID": ASHA_SINK_UUID,
+                                          "Codec": G722_CODEC,
+                                          "DelayReporting": True,
+                                          "Capabilities": ASHA_CAPABILITIES})
+        if sys.argv[2] == "sbcsink":
+            properties = dbus.Dictionary({"UUID": A2DP_SINK_UUID,
+                                          "Codec": SBC_CODEC,
+                                          "DelayReporting": True,
+                                          "Capabilities": SBC_CAPABILITIES})
+        if sys.argv[2] == "mp3source":
+            properties = dbus.Dictionary({"UUID": A2DP_SOURCE_UUID,
+                                          "Codec": MP3_CODEC,
+                                          "Capabilities": MP3_CAPABILITIES})
+            endpoint.default_configuration(MP3_CONFIGURATION)
+        if sys.argv[2] == "mp3sink":
+            properties = dbus.Dictionary({"UUID": A2DP_SINK_UUID,
+                                          "Codec": MP3_CODEC,
+                                          "Capabilities": MP3_CAPABILITIES})
+            endpoint.default_configuration(MP3_CONFIGURATION)
+        if sys.argv[2] == "hfpag" or sys.argv[2] == "hspag":
+            properties = dbus.Dictionary({"UUID": HFP_AG_UUID,
+                                          "Codec": PCM_CODEC,
+                                          "Capabilities":  PCM_CONFIGURATION})
+            endpoint.default_configuration(dbus.Array([]))
+        if sys.argv[2] == "hfphf":
+            properties = dbus.Dictionary({"UUID": HFP_HF_UUID,
+                                          "Codec": CVSD_CODEC,
+                                          "Capabilities":  PCM_CONFIGURATION})
+            endpoint.default_configuration(dbus.Array([]))
 
-	print(properties)
+    print(properties)
 
-	media.RegisterEndpoint(path, properties)
+    media.RegisterEndpoint(path, properties)
 
-	mainloop.run()
+    mainloop.run()
