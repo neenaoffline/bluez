@@ -51,75 +51,75 @@
 #define MEDIA_ENDPOINT_INTERFACE "org.bluez.MediaEndpoint1"
 #define MEDIA_PLAYER_INTERFACE "org.mpris.MediaPlayer2.Player"
 
-#define REQUEST_TIMEOUT (3 * 1000)		/* 3 seconds */
+#define REQUEST_TIMEOUT (3 * 1000) /* 3 seconds */
 
 struct media_app {
-	struct media_adapter	*adapter;
-	GDBusClient		*client;
-	DBusMessage		*reg;
-	char			*sender;	/* Application bus id */
-	char			*path;		/* Application object path */
-	struct queue		*proxies;	/* Application proxies */
-	struct queue		*endpoints;	/* Application endpoints */
-	struct queue		*players;	/* Application players */
-	int			err;
+	struct media_adapter *adapter;
+	GDBusClient *client;
+	DBusMessage *reg;
+	char *sender; /* Application bus id */
+	char *path; /* Application object path */
+	struct queue *proxies; /* Application proxies */
+	struct queue *endpoints; /* Application endpoints */
+	struct queue *players; /* Application players */
+	int err;
 };
 
 struct media_adapter {
-	struct btd_adapter	*btd_adapter;
-	struct queue		*apps;		/* Application list */
-	GSList			*endpoints;	/* Endpoints list */
-	GSList			*players;	/* Players list */
+	struct btd_adapter *btd_adapter;
+	struct queue *apps; /* Application list */
+	GSList *endpoints; /* Endpoints list */
+	GSList *players; /* Players list */
 };
 
 struct endpoint_request {
-	struct media_endpoint	*endpoint;
-	struct media_transport	*transport;
-	DBusMessage		*msg;
-	DBusPendingCall		*call;
-	media_endpoint_cb_t	cb;
-	GDestroyNotify		destroy;
-	void			*user_data;
+	struct media_endpoint *endpoint;
+	struct media_transport *transport;
+	DBusMessage *msg;
+	DBusPendingCall *call;
+	media_endpoint_cb_t cb;
+	GDestroyNotify destroy;
+	void *user_data;
 };
 
 struct media_endpoint {
-	struct a2dp_sep		*sep;
+	struct a2dp_sep *sep;
 	struct asha_central *asha_central;
-	char			*sender;	/* Endpoint DBus bus id */
-	char			*path;		/* Endpoint object path */
-	char			*uuid;		/* Endpoint property UUID */
-	uint8_t			codec;		/* Endpoint codec */
-	uint8_t			*capabilities;	/* Endpoint property capabilities */
-	size_t			size;		/* Endpoint capabilities size */
-	guint			hs_watch;
-	guint			ag_watch;
-	guint			watch;
-	GSList			*requests;
-	struct media_adapter	*adapter;
-	GSList			*transports;
+	char *sender; /* Endpoint DBus bus id */
+	char *path; /* Endpoint object path */
+	char *uuid; /* Endpoint property UUID */
+	uint8_t codec; /* Endpoint codec */
+	uint8_t *capabilities; /* Endpoint property capabilities */
+	size_t size; /* Endpoint capabilities size */
+	guint hs_watch;
+	guint ag_watch;
+	guint watch;
+	GSList *requests;
+	struct media_adapter *adapter;
+	GSList *transports;
 };
 
 struct media_player {
-	struct media_adapter	*adapter;
-	struct avrcp_player	*player;
-	char			*sender;	/* Player DBus bus id */
-	char			*path;		/* Player object path */
-	GHashTable		*settings;	/* Player settings */
-	GHashTable		*track;		/* Player current track */
-	guint			watch;
-	guint			properties_watch;
-	guint			seek_watch;
-	char			*status;
-	uint32_t		position;
-	uint32_t		duration;
-	int8_t			volume;
-	GTimer			*timer;
-	bool			play;
-	bool			pause;
-	bool			next;
-	bool			previous;
-	bool			control;
-	char			*name;
+	struct media_adapter *adapter;
+	struct avrcp_player *player;
+	char *sender; /* Player DBus bus id */
+	char *path; /* Player object path */
+	GHashTable *settings; /* Player settings */
+	GHashTable *track; /* Player current track */
+	guint watch;
+	guint properties_watch;
+	guint seek_watch;
+	char *status;
+	uint32_t position;
+	uint32_t duration;
+	int8_t volume;
+	GTimer *timer;
+	bool play;
+	bool pause;
+	bool next;
+	bool previous;
+	bool control;
+	char *name;
 };
 
 static GSList *adapters = NULL;
@@ -164,7 +164,7 @@ static void media_endpoint_destroy(struct media_endpoint *endpoint)
 	media_endpoint_cancel_all(endpoint);
 
 	g_slist_free_full(endpoint->transports,
-				(GDestroyNotify) media_transport_destroy);
+			  (GDestroyNotify)media_transport_destroy);
 
 	g_dbus_remove_watch(btd_get_dbus_connection(), endpoint->watch);
 	g_free(endpoint->capabilities);
@@ -174,11 +174,9 @@ static void media_endpoint_destroy(struct media_endpoint *endpoint)
 	g_free(endpoint);
 }
 
-static struct media_endpoint *media_adapter_find_endpoint(
-						struct media_adapter *adapter,
-						const char *sender,
-						const char *path,
-						const char *uuid)
+static struct media_endpoint *
+media_adapter_find_endpoint(struct media_adapter *adapter, const char *sender,
+			    const char *path, const char *uuid)
 {
 	GSList *l;
 
@@ -211,14 +209,14 @@ static void media_endpoint_remove(void *data)
 	}
 
 	info("Endpoint unregistered: sender=%s path=%s", endpoint->sender,
-			endpoint->path);
+	     endpoint->path);
 
 	adapter->endpoints = g_slist_remove(adapter->endpoints, endpoint);
 
-	if (media_adapter_find_endpoint(adapter, NULL, NULL,
-						endpoint->uuid) == NULL)
+	if (media_adapter_find_endpoint(adapter, NULL, NULL, endpoint->uuid) ==
+	    NULL)
 		btd_profile_remove_custom_prop(endpoint->uuid,
-							"MediaEndpoints");
+					       "MediaEndpoints");
 
 	media_endpoint_destroy(endpoint);
 }
@@ -246,7 +244,7 @@ static struct media_adapter *find_adapter(struct btd_device *device)
 }
 
 static void endpoint_remove_transport(struct media_endpoint *endpoint,
-					struct media_transport *transport)
+				      struct media_transport *transport)
 {
 	if (!endpoint || !transport)
 		return;
@@ -256,14 +254,14 @@ static void endpoint_remove_transport(struct media_endpoint *endpoint,
 }
 
 static void clear_configuration(struct media_endpoint *endpoint,
-					struct media_transport *transport)
+				struct media_transport *transport)
 {
 	DBusMessage *msg;
 	const char *path;
 
 	msg = dbus_message_new_method_call(endpoint->sender, endpoint->path,
-						MEDIA_ENDPOINT_INTERFACE,
-						"ClearConfiguration");
+					   MEDIA_ENDPOINT_INTERFACE,
+					   "ClearConfiguration");
 	if (msg == NULL) {
 		error("Couldn't allocate D-Bus message");
 		goto done;
@@ -271,7 +269,7 @@ static void clear_configuration(struct media_endpoint *endpoint,
 
 	path = media_transport_get_path(transport);
 	dbus_message_append_args(msg, DBUS_TYPE_OBJECT_PATH, &path,
-							DBUS_TYPE_INVALID);
+				 DBUS_TYPE_INVALID);
 	g_dbus_send_message(btd_get_dbus_connection(), msg);
 done:
 	endpoint_remove_transport(endpoint, transport);
@@ -301,8 +299,7 @@ static void endpoint_reply(DBusPendingCall *call, void *user_data)
 
 	dbus_error_init(&err);
 	if (dbus_set_error_from_message(&err, reply)) {
-		error("Endpoint replied with an error: %s",
-				err.name);
+		error("Endpoint replied with an error: %s", err.name);
 
 		/* Clear endpoint configuration in case of NO_REPLY error */
 		if (dbus_error_has_name(&err, DBUS_ERROR_NO_REPLY)) {
@@ -313,8 +310,8 @@ static void endpoint_reply(DBusPendingCall *call, void *user_data)
 		}
 
 		if (dbus_message_is_method_call(request->msg,
-					MEDIA_ENDPOINT_INTERFACE,
-					"SetConfiguration"))
+						MEDIA_ENDPOINT_INTERFACE,
+						"SetConfiguration"))
 			endpoint_remove_transport(endpoint, request->transport);
 
 		dbus_error_free(&err);
@@ -322,7 +319,7 @@ static void endpoint_reply(DBusPendingCall *call, void *user_data)
 	}
 
 	if (dbus_message_is_method_call(request->msg, MEDIA_ENDPOINT_INTERFACE,
-				"SelectConfiguration")) {
+					"SelectConfiguration")) {
 		DBusMessageIter args, array;
 		uint8_t *configuration;
 
@@ -330,7 +327,8 @@ static void endpoint_reply(DBusPendingCall *call, void *user_data)
 
 		dbus_message_iter_recurse(&args, &array);
 
-		dbus_message_iter_get_fixed_array(&array, &configuration, &size);
+		dbus_message_iter_get_fixed_array(&array, &configuration,
+						  &size);
 
 		ret = configuration;
 		goto done;
@@ -355,27 +353,27 @@ done:
 }
 
 static gboolean media_endpoint_async_call(DBusMessage *msg,
-					struct media_endpoint *endpoint,
-					struct media_transport *transport,
-					media_endpoint_cb_t cb,
-					void *user_data,
-					GDestroyNotify destroy)
+					  struct media_endpoint *endpoint,
+					  struct media_transport *transport,
+					  media_endpoint_cb_t cb,
+					  void *user_data,
+					  GDestroyNotify destroy)
 {
 	struct endpoint_request *request;
 
 	request = g_new0(struct endpoint_request, 1);
 
 	/* Timeout should be less than avdtp request timeout (4 seconds) */
-	if (g_dbus_send_message_with_reply(btd_get_dbus_connection(),
-						msg, &request->call,
-						REQUEST_TIMEOUT) == FALSE) {
+	if (g_dbus_send_message_with_reply(btd_get_dbus_connection(), msg,
+					   &request->call,
+					   REQUEST_TIMEOUT) == FALSE) {
 		error("D-Bus send failed");
 		g_free(request);
 		return FALSE;
 	}
 
 	dbus_pending_call_set_notify(request->call, endpoint_reply, request,
-									NULL);
+				     NULL);
 
 	request->endpoint = endpoint;
 	request->transport = transport;
@@ -387,40 +385,36 @@ static gboolean media_endpoint_async_call(DBusMessage *msg,
 	endpoint->requests = g_slist_append(endpoint->requests, request);
 
 	DBG("Calling %s: name = %s path = %s", dbus_message_get_member(msg),
-			dbus_message_get_destination(msg),
-			dbus_message_get_path(msg));
+	    dbus_message_get_destination(msg), dbus_message_get_path(msg));
 
 	return TRUE;
 }
 
 static gboolean select_configuration(struct media_endpoint *endpoint,
-						uint8_t *capabilities,
-						size_t length,
-						media_endpoint_cb_t cb,
-						void *user_data,
-						GDestroyNotify destroy)
+				     uint8_t *capabilities, size_t length,
+				     media_endpoint_cb_t cb, void *user_data,
+				     GDestroyNotify destroy)
 {
 	DBusMessage *msg;
 
 	msg = dbus_message_new_method_call(endpoint->sender, endpoint->path,
-						MEDIA_ENDPOINT_INTERFACE,
-						"SelectConfiguration");
+					   MEDIA_ENDPOINT_INTERFACE,
+					   "SelectConfiguration");
 	if (msg == NULL) {
 		error("Couldn't allocate D-Bus message");
 		return FALSE;
 	}
 
 	dbus_message_append_args(msg, DBUS_TYPE_ARRAY, DBUS_TYPE_BYTE,
-					&capabilities, length,
-					DBUS_TYPE_INVALID);
+				 &capabilities, length, DBUS_TYPE_INVALID);
 
-	return media_endpoint_async_call(msg, endpoint, NULL,
-						cb, user_data, destroy);
+	return media_endpoint_async_call(msg, endpoint, NULL, cb, user_data,
+					 destroy);
 }
 
 static int transport_device_cmp(gconstpointer data, gconstpointer user_data)
 {
-	struct media_transport *transport = (struct media_transport *) data;
+	struct media_transport *transport = (struct media_transport *)data;
 	const struct btd_device *device = user_data;
 	const struct btd_device *dev = media_transport_get_dev(transport);
 
@@ -430,14 +424,14 @@ static int transport_device_cmp(gconstpointer data, gconstpointer user_data)
 	return -1;
 }
 
-static struct media_transport *find_device_transport(
-					struct media_endpoint *endpoint,
-					struct btd_device *device)
+static struct media_transport *
+find_device_transport(struct media_endpoint *endpoint,
+		      struct btd_device *device)
 {
 	GSList *match;
 
 	match = g_slist_find_custom(endpoint->transports, device,
-							transport_device_cmp);
+				    transport_device_cmp);
 	if (match == NULL)
 		return NULL;
 
@@ -477,12 +471,11 @@ int8_t media_player_get_device_volume(struct btd_device *device)
 }
 
 static gboolean set_configuration(struct media_endpoint *endpoint,
-					uint8_t *configuration, size_t size,
-					media_endpoint_cb_t cb,
-					void *user_data,
-					GDestroyNotify destroy,
-					const char *remote_endpoint,
-					struct btd_device *device)
+				  uint8_t *configuration, size_t size,
+				  media_endpoint_cb_t cb, void *user_data,
+				  GDestroyNotify destroy,
+				  const char *remote_endpoint,
+				  struct btd_device *device)
 {
 	DBusConnection *conn = btd_get_dbus_connection();
 	DBusMessage *msg;
@@ -496,9 +489,8 @@ static gboolean set_configuration(struct media_endpoint *endpoint,
 	if (transport != NULL)
 		return FALSE;
 
-	transport = media_transport_create(device,
-					remote_endpoint,
-					configuration, size, endpoint);
+	transport = media_transport_create(device, remote_endpoint,
+					   configuration, size, endpoint);
 	if (transport == NULL)
 		return FALSE;
 
@@ -506,8 +498,8 @@ static gboolean set_configuration(struct media_endpoint *endpoint,
 	media_transport_update_volume(transport, init_volume);
 
 	msg = dbus_message_new_method_call(endpoint->sender, endpoint->path,
-						MEDIA_ENDPOINT_INTERFACE,
-						"SetConfiguration");
+					   MEDIA_ENDPOINT_INTERFACE,
+					   "SetConfiguration");
 	if (msg == NULL) {
 		error("Couldn't allocate D-Bus message");
 		media_transport_destroy(transport);
@@ -523,11 +515,12 @@ static gboolean set_configuration(struct media_endpoint *endpoint,
 
 	g_dbus_get_properties(conn, path, "org.bluez.MediaTransport1", &iter);
 
-	return media_endpoint_async_call(msg, endpoint, transport,
-						cb, user_data, destroy);
+	return media_endpoint_async_call(msg, endpoint, transport, cb,
+					 user_data, destroy);
 }
 
-static gboolean media_endpoint_is_asha(struct media_endpoint *endpoint) {
+static gboolean media_endpoint_is_asha(struct media_endpoint *endpoint)
+{
 	return endpoint->asha_central != NULL;
 }
 
@@ -544,8 +537,7 @@ static void release_endpoint(struct media_endpoint *endpoint)
 	clear_endpoint(endpoint);
 
 	msg = dbus_message_new_method_call(endpoint->sender, endpoint->path,
-						MEDIA_ENDPOINT_INTERFACE,
-						"Release");
+					   MEDIA_ENDPOINT_INTERFACE, "Release");
 	if (msg == NULL) {
 		error("Couldn't allocate D-Bus message");
 		return;
@@ -572,7 +564,7 @@ static const char *get_path(struct a2dp_sep *sep, void *user_data)
 }
 
 static size_t get_capabilities(struct a2dp_sep *sep, uint8_t **capabilities,
-							void *user_data)
+			       void *user_data)
 {
 	struct media_endpoint *endpoint = user_data;
 
@@ -586,7 +578,7 @@ struct a2dp_select_data {
 };
 
 static void select_cb(struct media_endpoint *endpoint, void *ret, int size,
-							void *user_data)
+		      void *user_data)
 {
 	struct a2dp_select_data *data = user_data;
 
@@ -594,8 +586,8 @@ static void select_cb(struct media_endpoint *endpoint, void *ret, int size,
 }
 
 static int select_config(struct a2dp_sep *sep, uint8_t *capabilities,
-				size_t length, struct a2dp_setup *setup,
-				a2dp_endpoint_select_t cb, void *user_data)
+			 size_t length, struct a2dp_setup *setup,
+			 a2dp_endpoint_select_t cb, void *user_data)
 {
 	struct media_endpoint *endpoint = user_data;
 	struct a2dp_select_data *data;
@@ -604,8 +596,8 @@ static int select_config(struct a2dp_sep *sep, uint8_t *capabilities,
 	data->setup = setup;
 	data->cb = cb;
 
-	if (select_configuration(endpoint, capabilities, length,
-					select_cb, data, g_free) == TRUE)
+	if (select_configuration(endpoint, capabilities, length, select_cb,
+				 data, g_free) == TRUE)
 		return 0;
 
 	g_free(data);
@@ -613,7 +605,7 @@ static int select_config(struct a2dp_sep *sep, uint8_t *capabilities,
 }
 
 static void config_cb(struct media_endpoint *endpoint, void *ret, int size,
-							void *user_data)
+		      void *user_data)
 {
 	struct a2dp_config_data *data = user_data;
 	gboolean *ret_value = ret;
@@ -622,10 +614,8 @@ static void config_cb(struct media_endpoint *endpoint, void *ret, int size,
 }
 
 static int set_config(struct a2dp_sep *sep, uint8_t *configuration,
-				size_t length,
-				struct a2dp_setup *setup,
-				a2dp_endpoint_config_t cb,
-				void *user_data)
+		      size_t length, struct a2dp_setup *setup,
+		      a2dp_endpoint_config_t cb, void *user_data)
 {
 	struct media_endpoint *endpoint = user_data;
 	struct a2dp_config_data *data;
@@ -638,7 +628,7 @@ static int set_config(struct a2dp_sep *sep, uint8_t *configuration,
 	const char *remote_endpoint = a2dp_setup_remote_path(setup);
 
 	if (set_configuration(endpoint, configuration, length, config_cb, data,
-							g_free, remote_endpoint, device) == TRUE)
+			      g_free, remote_endpoint, device) == TRUE)
 		return 0;
 
 	g_free(data);
@@ -689,13 +679,12 @@ static void a2dp_destroy_endpoint(void *user_data)
 }
 
 static gboolean endpoint_init_a2dp_source(struct media_endpoint *endpoint,
-						gboolean delay_reporting,
-						int *err)
+					  gboolean delay_reporting, int *err)
 {
 	endpoint->sep = a2dp_add_sep(endpoint->adapter->btd_adapter,
-					AVDTP_SEP_TYPE_SOURCE, endpoint->codec,
-					delay_reporting, &a2dp_endpoint,
-					endpoint, a2dp_destroy_endpoint, err);
+				     AVDTP_SEP_TYPE_SOURCE, endpoint->codec,
+				     delay_reporting, &a2dp_endpoint, endpoint,
+				     a2dp_destroy_endpoint, err);
 	if (endpoint->sep == NULL)
 		return FALSE;
 
@@ -703,32 +692,33 @@ static gboolean endpoint_init_a2dp_source(struct media_endpoint *endpoint,
 }
 
 static gboolean endpoint_init_a2dp_sink(struct media_endpoint *endpoint,
-						gboolean delay_reporting,
-						int *err)
+					gboolean delay_reporting, int *err)
 {
 	endpoint->sep = a2dp_add_sep(endpoint->adapter->btd_adapter,
-					AVDTP_SEP_TYPE_SINK, endpoint->codec,
-					delay_reporting, &a2dp_endpoint,
-					endpoint, a2dp_destroy_endpoint, err);
+				     AVDTP_SEP_TYPE_SINK, endpoint->codec,
+				     delay_reporting, &a2dp_endpoint, endpoint,
+				     a2dp_destroy_endpoint, err);
 	if (endpoint->sep == NULL)
 		return FALSE;
 
 	return TRUE;
 }
 
-static size_t asha_get_capabilities (struct asha_central *central,
-		uint8_t **capabilities,
-		void *user_data) {
+static size_t asha_get_capabilities(struct asha_central *central,
+				    uint8_t **capabilities, void *user_data)
+{
 	return 0;
 }
 
 static void asha_config_cb(struct media_endpoint *endpoint, void *ret, int size,
-							void *user_data)
+			   void *user_data)
 {
 	DBG("ASHA set_configuration callback");
 }
 
-size_t asha_set_configuration(struct btd_device *device, struct asha_central *central) {
+size_t asha_set_configuration(struct btd_device *device,
+			      struct asha_central *central)
+{
 	struct media_transport *transport;
 
 	// The media_transport->config is initialized with this value
@@ -751,24 +741,25 @@ size_t asha_set_configuration(struct btd_device *device, struct asha_central *ce
 	return 0;
 }
 
-static struct asha_endpoint asha_endpoint = {
-	.get_capabilities = asha_get_capabilities,
-	.set_configuration = asha_set_configuration
-};
+static struct asha_endpoint asha_endpoint = { .get_capabilities =
+						      asha_get_capabilities,
+					      .set_configuration =
+						      asha_set_configuration };
 
-static gboolean endpoint_init_asha_sink(struct media_endpoint *endpoint, int *err)
+static gboolean endpoint_init_asha_sink(struct media_endpoint *endpoint,
+					int *err)
 {
-	endpoint->asha_central = asha_add_central(endpoint->adapter->btd_adapter,
-			&asha_endpoint, asha_destroy_endpoint, endpoint, err);
+	endpoint->asha_central =
+		asha_add_central(endpoint->adapter->btd_adapter, &asha_endpoint,
+				 asha_destroy_endpoint, endpoint, err);
 	if (endpoint->asha_central == NULL)
 		return FALSE;
 
 	return TRUE;
 }
 
-static bool endpoint_properties_exists(const char *uuid,
-						struct btd_device *dev,
-						void *user_data)
+static bool endpoint_properties_exists(const char *uuid, struct btd_device *dev,
+				       void *user_data)
 {
 	struct media_adapter *adapter;
 
@@ -783,41 +774,39 @@ static bool endpoint_properties_exists(const char *uuid,
 }
 
 static void append_endpoint(struct media_endpoint *endpoint,
-						DBusMessageIter *dict)
+			    DBusMessageIter *dict)
 {
 	DBusMessageIter entry, var, props;
 
-	dbus_message_iter_open_container(dict, DBUS_TYPE_DICT_ENTRY,
-							NULL, &entry);
+	dbus_message_iter_open_container(dict, DBUS_TYPE_DICT_ENTRY, NULL,
+					 &entry);
 
 	dbus_message_iter_append_basic(&entry, DBUS_TYPE_STRING,
-						&endpoint->sender);
+				       &endpoint->sender);
 
 	dbus_message_iter_open_container(&entry, DBUS_TYPE_VARIANT, "a{sv}",
-								&var);
+					 &var);
 
-	dbus_message_iter_open_container(&var, DBUS_TYPE_ARRAY,
-					DBUS_DICT_ENTRY_BEGIN_CHAR_AS_STRING
-					DBUS_TYPE_STRING_AS_STRING
-					DBUS_TYPE_VARIANT_AS_STRING
-					DBUS_DICT_ENTRY_END_CHAR_AS_STRING,
-					&props);
+	dbus_message_iter_open_container(
+		&var, DBUS_TYPE_ARRAY,
+		DBUS_DICT_ENTRY_BEGIN_CHAR_AS_STRING DBUS_TYPE_STRING_AS_STRING
+			DBUS_TYPE_VARIANT_AS_STRING
+				DBUS_DICT_ENTRY_END_CHAR_AS_STRING,
+		&props);
 
 	dict_append_entry(&props, "Path", DBUS_TYPE_OBJECT_PATH,
-							&endpoint->path);
+			  &endpoint->path);
 	dict_append_entry(&props, "Codec", DBUS_TYPE_BYTE, &endpoint->codec);
 	dict_append_array(&props, "Capabilities", DBUS_TYPE_BYTE,
-				&endpoint->capabilities, endpoint->size);
+			  &endpoint->capabilities, endpoint->size);
 
 	dbus_message_iter_close_container(&var, &props);
 	dbus_message_iter_close_container(&entry, &var);
 	dbus_message_iter_close_container(dict, &entry);
 }
 
-static bool endpoint_properties_get(const char *uuid,
-						struct btd_device *dev,
-						DBusMessageIter *iter,
-						void *user_data)
+static bool endpoint_properties_get(const char *uuid, struct btd_device *dev,
+				    DBusMessageIter *iter, void *user_data)
 {
 	struct media_adapter *adapter;
 	DBusMessageIter dict;
@@ -827,12 +816,12 @@ static bool endpoint_properties_get(const char *uuid,
 	if (adapter == NULL)
 		return false;
 
-	dbus_message_iter_open_container(iter, DBUS_TYPE_ARRAY,
-					DBUS_DICT_ENTRY_BEGIN_CHAR_AS_STRING
-					DBUS_TYPE_STRING_AS_STRING
-					DBUS_TYPE_VARIANT_AS_STRING
-					DBUS_DICT_ENTRY_END_CHAR_AS_STRING,
-					&dict);
+	dbus_message_iter_open_container(
+		iter, DBUS_TYPE_ARRAY,
+		DBUS_DICT_ENTRY_BEGIN_CHAR_AS_STRING DBUS_TYPE_STRING_AS_STRING
+			DBUS_TYPE_VARIANT_AS_STRING
+				DBUS_DICT_ENTRY_END_CHAR_AS_STRING,
+		&dict);
 
 	for (l = adapter->endpoints; l; l = l->next) {
 		struct media_endpoint *endpoint = l->data;
@@ -848,15 +837,11 @@ static bool endpoint_properties_get(const char *uuid,
 	return true;
 }
 
-static struct media_endpoint *media_endpoint_create(struct media_adapter *adapter,
-						const char *sender,
-						const char *path,
-						const char *uuid,
-						gboolean delay_reporting,
-						uint8_t codec,
-						uint8_t *capabilities,
-						int size,
-						int *err)
+static struct media_endpoint *
+media_endpoint_create(struct media_adapter *adapter, const char *sender,
+		      const char *path, const char *uuid,
+		      gboolean delay_reporting, uint8_t codec,
+		      uint8_t *capabilities, int size, int *err)
 {
 	struct media_endpoint *endpoint;
 	gboolean succeeded;
@@ -876,19 +861,19 @@ static struct media_endpoint *media_endpoint_create(struct media_adapter *adapte
 	endpoint->adapter = adapter;
 
 	if (strcasecmp(uuid, A2DP_SOURCE_UUID) == 0)
-		succeeded = endpoint_init_a2dp_source(endpoint,
-							delay_reporting, err);
+		succeeded = endpoint_init_a2dp_source(endpoint, delay_reporting,
+						      err);
 	else if (strcasecmp(uuid, A2DP_SINK_UUID) == 0)
-		succeeded = endpoint_init_a2dp_sink(endpoint,
-							delay_reporting, err);
+		succeeded =
+			endpoint_init_a2dp_sink(endpoint, delay_reporting, err);
 	else if (strcasecmp(uuid, ASHA_SINK_UUID) == 0)
 		// make delay_reporting mandatory for asha
 		succeeded = endpoint_init_asha_sink(endpoint, err);
 	else if (strcasecmp(uuid, HFP_AG_UUID) == 0 ||
-					strcasecmp(uuid, HSP_AG_UUID) == 0)
+		 strcasecmp(uuid, HSP_AG_UUID) == 0)
 		succeeded = TRUE;
 	else if (strcasecmp(uuid, HFP_HS_UUID) == 0 ||
-					strcasecmp(uuid, HSP_HS_UUID) == 0)
+		 strcasecmp(uuid, HSP_HS_UUID) == 0)
 		succeeded = TRUE;
 	else {
 		succeeded = FALSE;
@@ -902,15 +887,15 @@ static struct media_endpoint *media_endpoint_create(struct media_adapter *adapte
 		return NULL;
 	}
 
-	endpoint->watch = g_dbus_add_disconnect_watch(btd_get_dbus_connection(),
-						sender, media_endpoint_exit,
-						endpoint, NULL);
+	endpoint->watch =
+		g_dbus_add_disconnect_watch(btd_get_dbus_connection(), sender,
+					    media_endpoint_exit, endpoint,
+					    NULL);
 
 	if (media_adapter_find_endpoint(adapter, NULL, NULL, uuid) == NULL) {
 		btd_profile_add_custom_prop(uuid, "a{sv}", "MediaEndpoints",
-						endpoint_properties_exists,
-						endpoint_properties_get,
-						NULL);
+					    endpoint_properties_exists,
+					    endpoint_properties_get, NULL);
 	}
 
 	adapter->endpoints = g_slist_append(adapter->endpoints, endpoint);
@@ -922,8 +907,8 @@ static struct media_endpoint *media_endpoint_create(struct media_adapter *adapte
 }
 
 static int parse_properties(DBusMessageIter *props, const char **uuid,
-				gboolean *delay_reporting, uint8_t *codec,
-				uint8_t **capabilities, int *size)
+			    gboolean *delay_reporting, uint8_t *codec,
+			    uint8_t **capabilities, int *size)
 {
 	gboolean has_uuid = FALSE;
 	gboolean has_codec = FALSE;
@@ -962,7 +947,7 @@ static int parse_properties(DBusMessageIter *props, const char **uuid,
 
 			dbus_message_iter_recurse(&value, &array);
 			dbus_message_iter_get_fixed_array(&array, capabilities,
-							size);
+							  size);
 		}
 
 		dbus_message_iter_next(props);
@@ -972,7 +957,7 @@ static int parse_properties(DBusMessageIter *props, const char **uuid,
 }
 
 static DBusMessage *register_endpoint(DBusConnection *conn, DBusMessage *msg,
-					void *data)
+				      void *data)
 {
 	struct media_adapter *adapter = data;
 	DBusMessageIter args, props;
@@ -998,11 +983,11 @@ static DBusMessage *register_endpoint(DBusConnection *conn, DBusMessage *msg,
 		return btd_error_invalid_args(msg);
 
 	if (parse_properties(&props, &uuid, &delay_reporting, &codec,
-						&capabilities, &size) < 0)
+			     &capabilities, &size) < 0)
 		return btd_error_invalid_args(msg);
 
 	if (media_endpoint_create(adapter, sender, path, uuid, delay_reporting,
-				codec, capabilities, size, &err) == NULL) {
+				  codec, capabilities, size, &err) == NULL) {
 		if (err == -EPROTONOSUPPORT)
 			return btd_error_not_supported(msg);
 		else
@@ -1019,9 +1004,8 @@ static DBusMessage *unregister_endpoint(DBusConnection *conn, DBusMessage *msg,
 	struct media_endpoint *endpoint;
 	const char *sender, *path;
 
-	if (!dbus_message_get_args(msg, NULL,
-				DBUS_TYPE_OBJECT_PATH, &path,
-				DBUS_TYPE_INVALID))
+	if (!dbus_message_get_args(msg, NULL, DBUS_TYPE_OBJECT_PATH, &path,
+				   DBUS_TYPE_INVALID))
 		return btd_error_invalid_args(msg);
 
 	sender = dbus_message_get_sender(msg);
@@ -1035,10 +1019,9 @@ static DBusMessage *unregister_endpoint(DBusConnection *conn, DBusMessage *msg,
 	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
 }
 
-static struct media_player *media_adapter_find_player(
-						struct media_adapter *adapter,
-						const char *sender,
-						const char *path)
+static struct media_player *
+media_adapter_find_player(struct media_adapter *adapter, const char *sender,
+			  const char *path)
 {
 	GSList *l;
 
@@ -1064,8 +1047,7 @@ static void release_player(struct media_player *mp)
 	DBG("sender=%s path=%s", mp->sender, mp->path);
 
 	msg = dbus_message_new_method_call(mp->sender, mp->path,
-						MEDIA_PLAYER_INTERFACE,
-						"Release");
+					   MEDIA_PLAYER_INTERFACE, "Release");
 	if (msg == NULL) {
 		error("Couldn't allocate D-Bus message");
 		return;
@@ -1168,8 +1150,7 @@ static void set_shuffle_setting(DBusMessageIter *iter, const char *value)
 
 	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &key);
 	dbus_message_iter_open_container(iter, DBUS_TYPE_VARIANT,
-						DBUS_TYPE_BOOLEAN_AS_STRING,
-						&var);
+					 DBUS_TYPE_BOOLEAN_AS_STRING, &var);
 	val = strcasecmp(value, "off") != 0;
 	dbus_message_iter_append_basic(&var, DBUS_TYPE_BOOLEAN, &val);
 	dbus_message_iter_close_container(iter, &var);
@@ -1197,15 +1178,14 @@ static void set_repeat_setting(DBusMessageIter *iter, const char *value)
 
 	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &key);
 	dbus_message_iter_open_container(iter, DBUS_TYPE_VARIANT,
-						DBUS_TYPE_STRING_AS_STRING,
-						&var);
+					 DBUS_TYPE_STRING_AS_STRING, &var);
 	val = repeat_to_loop_status(value);
 	dbus_message_iter_append_basic(&var, DBUS_TYPE_STRING, &val);
 	dbus_message_iter_close_container(iter, &var);
 }
 
 static int media_player_set_setting(const char *key, const char *value,
-						void *user_data)
+				    void *user_data)
 {
 	struct media_player *mp = user_data;
 	const char *iface = MEDIA_PLAYER_INTERFACE;
@@ -1223,7 +1203,7 @@ static int media_player_set_setting(const char *key, const char *value,
 		return 0;
 
 	msg = dbus_message_new_method_call(mp->sender, mp->path,
-					DBUS_INTERFACE_PROPERTIES, "Set");
+					   DBUS_INTERFACE_PROPERTIES, "Set");
 	if (msg == NULL) {
 		error("Couldn't allocate D-Bus message");
 		return -ENOMEM;
@@ -1296,8 +1276,8 @@ static uint32_t media_player_get_position(void *user_data)
 
 	timedelta = g_timer_elapsed(mp->timer, NULL);
 
-	sec = (uint32_t) timedelta;
-	msec = (uint32_t) ((timedelta - sec) * 1000);
+	sec = (uint32_t)timedelta;
+	msec = (uint32_t)((timedelta - sec) * 1000);
 
 	return mp->position + sec * 1000 + msec;
 }
@@ -1310,7 +1290,7 @@ static uint32_t media_player_get_duration(void *user_data)
 }
 
 static void media_player_set_volume(int8_t volume, struct btd_device *dev,
-						void *user_data)
+				    void *user_data)
 {
 	struct media_player *mp = user_data;
 
@@ -1325,7 +1305,7 @@ static bool media_player_send(struct media_player *mp, const char *name)
 	DBusMessage *msg;
 
 	msg = dbus_message_new_method_call(mp->sender, mp->path,
-					MEDIA_PLAYER_INTERFACE, name);
+					   MEDIA_PLAYER_INTERFACE, name);
 	if (msg == NULL) {
 		error("Couldn't allocate D-Bus message");
 		return false;
@@ -1470,8 +1450,8 @@ static gboolean set_position(struct media_player *mp, DBusMessageIter *iter)
 	DBG("Position=%u", mp->position);
 
 	if (!mp->position) {
-		avrcp_player_event(mp->player,
-					AVRCP_EVENT_TRACK_REACHED_START, NULL);
+		avrcp_player_event(mp->player, AVRCP_EVENT_TRACK_REACHED_START,
+				   NULL);
 		return TRUE;
 	}
 
@@ -1481,7 +1461,7 @@ static gboolean set_position(struct media_player *mp, DBusMessageIter *iter)
 	 */
 	if (mp->position == UINT32_MAX || mp->position >= mp->duration) {
 		avrcp_player_event(mp->player, AVRCP_EVENT_TRACK_REACHED_END,
-									NULL);
+				   NULL);
 		return TRUE;
 	}
 
@@ -1492,14 +1472,14 @@ static gboolean set_position(struct media_player *mp, DBusMessageIter *iter)
 }
 
 static void set_metadata(struct media_player *mp, const char *key,
-							const char *value)
+			 const char *value)
 {
 	DBG("%s=%s", key, value);
 	g_hash_table_replace(mp->track, g_strdup(key), g_strdup(value));
 }
 
 static gboolean parse_string_metadata(struct media_player *mp, const char *key,
-							DBusMessageIter *iter)
+				      DBusMessageIter *iter)
 {
 	const char *value;
 
@@ -1514,7 +1494,7 @@ static gboolean parse_string_metadata(struct media_player *mp, const char *key,
 }
 
 static gboolean parse_array_metadata(struct media_player *mp, const char *key,
-							DBusMessageIter *iter)
+				     DBusMessageIter *iter)
 {
 	DBusMessageIter array;
 	const char *value;
@@ -1538,7 +1518,7 @@ static gboolean parse_array_metadata(struct media_player *mp, const char *key,
 }
 
 static gboolean parse_int64_metadata(struct media_player *mp, const char *key,
-							DBusMessageIter *iter)
+				     DBusMessageIter *iter)
 {
 	uint64_t value;
 	char valstr[20];
@@ -1565,7 +1545,7 @@ static gboolean parse_int64_metadata(struct media_player *mp, const char *key,
 }
 
 static gboolean parse_int32_metadata(struct media_player *mp, const char *key,
-							DBusMessageIter *iter)
+				     DBusMessageIter *iter)
 {
 	uint32_t value;
 	char valstr[20];
@@ -1587,7 +1567,7 @@ static gboolean parse_int32_metadata(struct media_player *mp, const char *key,
 }
 
 static gboolean parse_player_metadata(struct media_player *mp,
-							DBusMessageIter *iter)
+				      DBusMessageIter *iter)
 {
 	DBusMessageIter dict;
 	DBusMessageIter var;
@@ -1604,11 +1584,11 @@ static gboolean parse_player_metadata(struct media_player *mp,
 	if (mp->track != NULL)
 		g_hash_table_unref(mp->track);
 
-	mp->track = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
-								g_free);
+	mp->track =
+		g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 
 	while ((ctype = dbus_message_iter_get_arg_type(&dict)) !=
-							DBUS_TYPE_INVALID) {
+	       DBUS_TYPE_INVALID) {
 		DBusMessageIter entry;
 		const char *key;
 
@@ -1653,8 +1633,7 @@ static gboolean parse_player_metadata(struct media_player *mp,
 	}
 
 	if (title == FALSE)
-		g_hash_table_insert(mp->track, g_strdup("Title"),
-								g_strdup(""));
+		g_hash_table_insert(mp->track, g_strdup("Title"), g_strdup(""));
 
 	mp->position = 0;
 	g_timer_start(mp->timer);
@@ -1667,7 +1646,7 @@ static gboolean parse_player_metadata(struct media_player *mp,
 }
 
 static gboolean set_property(struct media_player *mp, const char *key,
-							const char *value)
+			     const char *value)
 {
 	const char *curval;
 
@@ -1728,7 +1707,7 @@ static gboolean set_repeat(struct media_player *mp, DBusMessageIter *iter)
 }
 
 static gboolean set_flag(struct media_player *mp, DBusMessageIter *iter,
-								bool *var)
+			 bool *var)
 {
 	dbus_bool_t value;
 
@@ -1762,7 +1741,7 @@ static gboolean set_name(struct media_player *mp, DBusMessageIter *iter)
 }
 
 static gboolean set_player_property(struct media_player *mp, const char *key,
-							DBusMessageIter *entry)
+				    DBusMessageIter *entry)
 {
 	DBusMessageIter var;
 
@@ -1810,7 +1789,7 @@ static gboolean set_player_property(struct media_player *mp, const char *key,
 }
 
 static gboolean parse_player_properties(struct media_player *mp,
-							DBusMessageIter *iter)
+					DBusMessageIter *iter)
 {
 	DBusMessageIter dict;
 	int ctype;
@@ -1822,7 +1801,7 @@ static gboolean parse_player_properties(struct media_player *mp,
 	dbus_message_iter_recurse(iter, &dict);
 
 	while ((ctype = dbus_message_iter_get_arg_type(&dict)) !=
-							DBUS_TYPE_INVALID) {
+	       DBUS_TYPE_INVALID) {
 		DBusMessageIter entry;
 		const char *key;
 
@@ -1846,7 +1825,7 @@ static gboolean parse_player_properties(struct media_player *mp,
 }
 
 static gboolean properties_changed(DBusConnection *connection, DBusMessage *msg,
-							void *user_data)
+				   void *user_data)
 {
 	struct media_player *mp = user_data;
 	DBusMessageIter iter;
@@ -1863,7 +1842,7 @@ static gboolean properties_changed(DBusConnection *connection, DBusMessage *msg,
 }
 
 static gboolean position_changed(DBusConnection *connection, DBusMessage *msg,
-							void *user_data)
+				 void *user_data)
 {
 	struct media_player *mp = user_data;
 	DBusMessageIter iter;
@@ -1879,8 +1858,7 @@ static gboolean position_changed(DBusConnection *connection, DBusMessage *msg,
 
 static struct media_player *media_player_create(struct media_adapter *adapter,
 						const char *sender,
-						const char *path,
-						int *err)
+						const char *path, int *err)
 {
 	DBusConnection *conn = btd_get_dbus_connection();
 	struct media_player *mp;
@@ -1892,19 +1870,18 @@ static struct media_player *media_player_create(struct media_adapter *adapter,
 	mp->timer = g_timer_new();
 	mp->volume = -1;
 
-	mp->watch = g_dbus_add_disconnect_watch(conn, sender,
-						media_player_exit, mp,
-						NULL);
-	mp->properties_watch = g_dbus_add_properties_watch(conn, sender,
-						path, MEDIA_PLAYER_INTERFACE,
-						properties_changed,
+	mp->watch = g_dbus_add_disconnect_watch(conn, sender, media_player_exit,
 						mp, NULL);
-	mp->seek_watch = g_dbus_add_signal_watch(conn, sender,
-						path, MEDIA_PLAYER_INTERFACE,
-						"Seeked", position_changed,
-						mp, NULL);
-	mp->player = avrcp_register_player(adapter->btd_adapter, &player_cb,
-							mp, media_player_free);
+	mp->properties_watch =
+		g_dbus_add_properties_watch(conn, sender, path,
+					    MEDIA_PLAYER_INTERFACE,
+					    properties_changed, mp, NULL);
+	mp->seek_watch =
+		g_dbus_add_signal_watch(conn, sender, path,
+					MEDIA_PLAYER_INTERFACE, "Seeked",
+					position_changed, mp, NULL);
+	mp->player = avrcp_register_player(adapter->btd_adapter, &player_cb, mp,
+					   media_player_free);
 	if (!mp->player) {
 		if (err)
 			*err = -EPROTONOSUPPORT;
@@ -1912,8 +1889,8 @@ static struct media_player *media_player_create(struct media_adapter *adapter,
 		return NULL;
 	}
 
-	mp->settings = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
-								g_free);
+	mp->settings =
+		g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 
 	adapter->players = g_slist_append(adapter->players, mp);
 
@@ -1926,7 +1903,7 @@ static struct media_player *media_player_create(struct media_adapter *adapter,
 }
 
 static DBusMessage *register_player(DBusConnection *conn, DBusMessage *msg,
-					void *data)
+				    void *data)
 {
 	struct media_adapter *adapter = data;
 	struct media_player *mp;
@@ -1961,15 +1938,14 @@ static DBusMessage *register_player(DBusConnection *conn, DBusMessage *msg,
 }
 
 static DBusMessage *unregister_player(DBusConnection *conn, DBusMessage *msg,
-					void *data)
+				      void *data)
 {
 	struct media_adapter *adapter = data;
 	struct media_player *player;
 	const char *sender, *path;
 
-	if (!dbus_message_get_args(msg, NULL,
-				DBUS_TYPE_OBJECT_PATH, &path,
-				DBUS_TYPE_INVALID))
+	if (!dbus_message_get_args(msg, NULL, DBUS_TYPE_OBJECT_PATH, &path,
+				   DBUS_TYPE_INVALID))
 		return btd_error_invalid_args(msg);
 
 	sender = dbus_message_get_sender(msg);
@@ -1993,8 +1969,8 @@ static void app_free(void *data)
 
 	if (app->client) {
 		g_dbus_client_set_disconnect_watch(app->client, NULL, NULL);
-		g_dbus_client_set_proxy_handlers(app->client, NULL, NULL,
-								NULL, NULL);
+		g_dbus_client_set_proxy_handlers(app->client, NULL, NULL, NULL,
+						 NULL);
 		g_dbus_client_set_ready_watch(app->client, NULL, NULL);
 		g_dbus_client_unref(app->client);
 	}
@@ -2057,7 +2033,7 @@ static void app_register_endpoint(void *data, void *user_data)
 	dbus_message_iter_get_basic(&iter, &codec);
 
 	/* DelayReporting and Capabilities are considered optional */
-	if (g_dbus_proxy_get_property(proxy, "DelayReporting", &iter))	{
+	if (g_dbus_proxy_get_property(proxy, "DelayReporting", &iter)) {
 		if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_BOOLEAN)
 			goto fail;
 
@@ -2073,11 +2049,11 @@ static void app_register_endpoint(void *data, void *user_data)
 	}
 
 	endpoint = media_endpoint_create(app->adapter, app->sender, path, uuid,
-					delay_reporting, codec, capabilities,
-					size, &app->err);
+					 delay_reporting, codec, capabilities,
+					 size, &app->err);
 	if (!endpoint) {
 		error("Unable to register endpoint %s:%s: %s", app->sender,
-						path, strerror(-app->err));
+		      path, strerror(-app->err));
 		return;
 	}
 
@@ -2104,8 +2080,8 @@ static void app_register_player(void *data, void *user_data)
 	if (strcmp(iface, MEDIA_PLAYER_INTERFACE))
 		return;
 
-	player = media_player_create(app->adapter, app->sender, path,
-							&app->err);
+	player =
+		media_player_create(app->adapter, app->sender, path, &app->err);
 	if (!player)
 		return;
 
@@ -2170,7 +2146,7 @@ static void app_register_player(void *data, void *user_data)
 fail:
 	app->err = -EINVAL;
 	error("Unable to register player %s:%s: %s", app->sender, path,
-							strerror(-app->err));
+	      strerror(-app->err));
 	media_player_destroy(player);
 }
 
@@ -2189,7 +2165,6 @@ static void remove_app(void *data)
 	 * the first proxy that belongs to this service gets removed.
 	 */
 	g_dbus_client_set_proxy_handlers(app->client, NULL, NULL, NULL, NULL);
-
 
 	queue_remove(app->adapter->apps, app);
 
@@ -2227,7 +2202,7 @@ static void client_ready_cb(GDBusClient *client, void *user_data)
 		error("No valid external Media objects found");
 		fail = true;
 		reply = btd_error_failed(app->reg,
-					"No valid media object found");
+					 "No valid media object found");
 		goto reply;
 	}
 
@@ -2287,9 +2262,8 @@ static void proxy_removed_cb(GDBusProxy *proxy, void *user_data)
 	path = g_dbus_proxy_get_path(proxy);
 
 	if (!strcmp(iface, MEDIA_ENDPOINT_INTERFACE)) {
-		endpoint = queue_remove_if(app->endpoints,
-						match_endpoint_by_path,
-						(void *) path);
+		endpoint = queue_remove_if(
+			app->endpoints, match_endpoint_by_path, (void *)path);
 		if (!endpoint)
 			return;
 
@@ -2301,7 +2275,7 @@ static void proxy_removed_cb(GDBusProxy *proxy, void *user_data)
 		media_endpoint_remove(endpoint);
 	} else if (!strcmp(iface, MEDIA_PLAYER_INTERFACE)) {
 		player = queue_remove_if(app->players, match_player_by_path,
-						(void *) path);
+					 (void *)path);
 		if (!player)
 			return;
 
@@ -2315,7 +2289,7 @@ static void proxy_removed_cb(GDBusProxy *proxy, void *user_data)
 }
 
 static struct media_app *create_app(DBusConnection *conn, DBusMessage *msg,
-							const char *path)
+				    const char *path)
 {
 	struct media_app *app;
 	const char *sender = dbus_message_get_sender(msg);
@@ -2343,9 +2317,9 @@ static struct media_app *create_app(DBusConnection *conn, DBusMessage *msg,
 	app->reg = dbus_message_ref(msg);
 
 	g_dbus_client_set_disconnect_watch(app->client, client_disconnect_cb,
-									app);
+					   app);
 	g_dbus_client_set_proxy_handlers(app->client, proxy_added_cb,
-					proxy_removed_cb, NULL, app);
+					 proxy_removed_cb, NULL, app);
 	g_dbus_client_set_ready_watch(app->client, client_ready_cb, app);
 
 	return app;
@@ -2366,11 +2340,11 @@ static bool match_app(const void *a, const void *b)
 	const struct match_data *data = b;
 
 	return g_strcmp0(app->path, data->path) == 0 &&
-				g_strcmp0(app->sender, data->sender) == 0;
+	       g_strcmp0(app->sender, data->sender) == 0;
 }
 
 static DBusMessage *register_app(DBusConnection *conn, DBusMessage *msg,
-							void *user_data)
+				 void *user_data)
 {
 	struct media_adapter *adapter = user_data;
 	const char *sender = dbus_message_get_sender(msg);
@@ -2410,7 +2384,7 @@ static DBusMessage *register_app(DBusConnection *conn, DBusMessage *msg,
 }
 
 static DBusMessage *unregister_app(DBusConnection *conn, DBusMessage *msg,
-							void *user_data)
+				   void *user_data)
 {
 	struct media_adapter *adapter = user_data;
 	const char *sender = dbus_message_get_sender(msg);
@@ -2441,23 +2415,24 @@ static DBusMessage *unregister_app(DBusConnection *conn, DBusMessage *msg,
 
 static const GDBusMethodTable media_methods[] = {
 	{ GDBUS_METHOD("RegisterEndpoint",
-		GDBUS_ARGS({ "endpoint", "o" }, { "properties", "a{sv}" }),
-		NULL, register_endpoint) },
-	{ GDBUS_METHOD("UnregisterEndpoint",
-		GDBUS_ARGS({ "endpoint", "o" }), NULL, unregister_endpoint) },
+		       GDBUS_ARGS({ "endpoint", "o" },
+				  { "properties", "a{sv}" }),
+		       NULL, register_endpoint) },
+	{ GDBUS_METHOD("UnregisterEndpoint", GDBUS_ARGS({ "endpoint", "o" }),
+		       NULL, unregister_endpoint) },
 	{ GDBUS_METHOD("RegisterPlayer",
-		GDBUS_ARGS({ "player", "o" }, { "properties", "a{sv}" }),
-		NULL, register_player) },
-	{ GDBUS_METHOD("UnregisterPlayer",
-		GDBUS_ARGS({ "player", "o" }), NULL, unregister_player) },
+		       GDBUS_ARGS({ "player", "o" }, { "properties", "a{sv}" }),
+		       NULL, register_player) },
+	{ GDBUS_METHOD("UnregisterPlayer", GDBUS_ARGS({ "player", "o" }), NULL,
+		       unregister_player) },
 	{ GDBUS_ASYNC_METHOD("RegisterApplication",
-					GDBUS_ARGS({ "application", "o" },
-						{ "options", "a{sv}" }),
-					NULL, register_app) },
+			     GDBUS_ARGS({ "application", "o" },
+					{ "options", "a{sv}" }),
+			     NULL, register_app) },
 	{ GDBUS_ASYNC_METHOD("UnregisterApplication",
-					GDBUS_ARGS({ "application", "o" }),
-					NULL, unregister_app) },
-	{ },
+			     GDBUS_ARGS({ "application", "o" }), NULL,
+			     unregister_app) },
+	{},
 };
 
 static void path_free(void *data)
@@ -2487,12 +2462,11 @@ int media_register(struct btd_adapter *btd_adapter)
 	adapter->apps = queue_new();
 
 	if (!g_dbus_register_interface(btd_get_dbus_connection(),
-					adapter_get_path(btd_adapter),
-					MEDIA_INTERFACE,
-					media_methods, NULL, NULL,
-					adapter, path_free)) {
+				       adapter_get_path(btd_adapter),
+				       MEDIA_INTERFACE, media_methods, NULL,
+				       NULL, adapter, path_free)) {
 		error("D-Bus failed to register %s path",
-						adapter_get_path(btd_adapter));
+		      adapter_get_path(btd_adapter));
 		path_free(adapter);
 		return -1;
 	}
@@ -2510,15 +2484,16 @@ void media_unregister(struct btd_adapter *btd_adapter)
 		struct media_adapter *adapter = l->data;
 
 		if (adapter->btd_adapter == btd_adapter) {
-			g_dbus_unregister_interface(btd_get_dbus_connection(),
-						adapter_get_path(btd_adapter),
-						MEDIA_INTERFACE);
+			g_dbus_unregister_interface(
+				btd_get_dbus_connection(),
+				adapter_get_path(btd_adapter), MEDIA_INTERFACE);
 			return;
 		}
 	}
 }
 
-struct asha_central *media_endpoint_get_asha_central(struct media_endpoint *endpoint)
+struct asha_central *
+media_endpoint_get_asha_central(struct media_endpoint *endpoint)
 {
 	return endpoint->asha_central;
 }
