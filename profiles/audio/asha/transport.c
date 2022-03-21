@@ -22,6 +22,7 @@
 #include "src/device.h"
 #include "src/service.h"
 #include "src/log.h"
+#include "src/dbus-common.h"
 #include "src/shared/att.h"
 #include "src/shared/gatt-client.h"
 #include "profiles/audio/media.h"
@@ -147,6 +148,46 @@ static void send_audio_control_point_cb(bool success, const uint8_t att_ecode,
 	DBG("Control point written: %u", att_ecode);
 }
 
+struct bag {
+	bdaddr_t *addr;
+	uint16_t imtu;
+	uint16_t omtu;
+	uint16_t psm;
+	struct media_owner *owner;
+	struct media_transport *transport;
+	struct asha *asha;
+};
+
+static gboolean send_fd(gpointer data)
+{
+	gboolean ret;
+	struct bag *b = data;
+
+	int fd = xyz_connect(b->addr, b->psm);
+	media_transport_set_fd(b->transport, fd, b->imtu, b->omtu);
+
+	struct media_request *req = b->owner->pending;
+	req->id = 0;
+
+	ret = g_dbus_send_reply(btd_get_dbus_connection(), req->msg,
+				DBUS_TYPE_UNIX_FD, &fd, DBUS_TYPE_UINT16,
+				&b->imtu, DBUS_TYPE_UINT16, &b->omtu,
+				DBUS_TYPE_INVALID);
+
+	if (ret == FALSE) {
+		media_transport_remove_owner(b->transport);
+		return FALSE;
+	}
+
+	media_owner_remove(b->owner);
+
+	send_audio_control_point_start(b->asha, send_audio_control_point_cb);
+
+	transport_set_state(b->transport, TRANSPORT_STATE_ACTIVE);
+
+	return FALSE;
+}
+
 static guint resume_asha(struct media_transport *transport,
 			 struct media_owner *owner)
 {
@@ -159,6 +200,9 @@ static guint resume_asha(struct media_transport *transport,
 
 	char addrstr[100];
 	const bdaddr_t *addr = device_get_address(transport->device);
+	gboolean ret;
+	uint16_t imtu = MTU, omtu = MTU;
+
 	ba2str(addr, addrstr);
 
 	if (!asha_get_psm(transport->device, &psm)) {
@@ -171,18 +215,28 @@ static guint resume_asha(struct media_transport *transport,
 		return 0;
 	}
 
-	DBG("XYZ Addr: %s", addrstr);
+	// TODO Should this be in the g_idle_add call below?
 	transport_set_state(transport, TRANSPORT_STATE_REQUESTING);
 
-	// TODO: Do the following in a g_idle_add call
-	int fd = xyz_connect((bdaddr_t *)addr, psm);
-	media_transport_set_fd(transport, fd, MTU, MTU);
-	send_audio_control_point_start(asha, send_audio_control_point_cb);
+	struct bag *b = g_new0(struct bag, 1);
 
-	transport_set_state(transport, TRANSPORT_STATE_ACTIVE);
+	b->addr = addr;
+	b->imtu = MTU;
+	b->omtu = MTU;
+	b->psm = psm;
+	b->owner = owner;
+	b->transport = transport;
+	b->asha = asha;
+
+	g_idle_add(send_fd, b);
 	DBG("ASHA Transport Resume");
 
 	return cb_id++;
+
+fail:
+	media_transport_remove_owner(transport);
+
+	return 0;
 }
 
 /*

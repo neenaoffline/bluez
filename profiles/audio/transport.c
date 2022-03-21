@@ -51,18 +51,6 @@ static char *str_state[] = {
 	"TRANSPORT_STATE_SUSPENDING",
 };
 
-struct media_request {
-	DBusMessage		*msg;
-	guint			id;
-};
-
-struct media_owner {
-	struct media_transport	*transport;
-	struct media_request	*pending;
-	char			*name;
-	guint			watch;
-};
-
 struct a2dp_transport {
 	struct avdtp		*session;
 	uint16_t		delay;
@@ -161,19 +149,18 @@ static void media_request_reply(struct media_request *req, int err)
 	DBusMessage *reply;
 
 	DBG("Request %s Reply %s", dbus_message_get_member(req->msg),
-							strerror(err));
+	    strerror(err));
 
 	if (!err)
 		reply = g_dbus_create_reply(req->msg, DBUS_TYPE_INVALID);
 	else
-		reply = g_dbus_create_error(req->msg,
-						ERROR_INTERFACE ".Failed",
-						"%s", strerror(err));
+		reply = g_dbus_create_error(req->msg, ERROR_INTERFACE ".Failed",
+					    "%s", strerror(err));
 
 	g_dbus_send_message(btd_get_dbus_connection(), reply);
 }
 
-static void media_owner_remove(struct media_owner *owner)
+void media_owner_remove(struct media_owner *owner)
 {
 	struct media_transport *transport = owner->transport;
 	struct media_request *req = owner->pending;
@@ -204,7 +191,7 @@ static void media_owner_free(struct media_owner *owner)
 	g_free(owner);
 }
 
-static void media_transport_remove_owner(struct media_transport *transport)
+void media_transport_remove_owner(struct media_transport *transport)
 {
 	struct media_owner *owner = transport->owner;
 

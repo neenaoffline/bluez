@@ -725,9 +725,6 @@ size_t asha_set_configuration(struct btd_device *device,
 	// This is exposed as a property of the transport on dbus
 	uint8_t config = 0x01;
 
-	transport = media_transport_create(device, device_get_path(device),
-					   &config, 1, central->user_data);
-
 	set_configuration(
 		central->user_data, &config, 1, asha_config_cb, device,
 		// This is NULL since we don't want to free the device, since we aren't using

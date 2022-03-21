@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
 from __future__ import absolute_import, print_function, unicode_literals
+import bluezutils
+import time
 
 import io
 import os
@@ -10,12 +12,14 @@ import pdb
 import dbus
 import dbus.service
 import dbus.mainloop.glib
-import time
+import gi
+
+gi.require_version('GLib', '2.0')
+
 try:
-    from gi.repository import GObject
+    from gi.repository import GLib, GObject
 except ImportError:
     import gobject as GObject
-import bluezutils
 
 A2DP_SOURCE_UUID = "0000110A-0000-1000-8000-00805F9B34FB"
 A2DP_SINK_UUID = "0000110B-0000-1000-8000-00805F9B34FB"
@@ -35,6 +39,8 @@ SBC_CAPABILITIES = dbus.Array(
 # JointStereo 44.1Khz Subbands: Blocks: 16 Bitpool Range: 2-32
 SBC_CONFIGURATION = dbus.Array(
     [dbus.Byte(0x21), dbus.Byte(0x15), dbus.Byte(2), dbus.Byte(32)])
+
+ASHA_CAPABLITIES = dbus.Array([dbus.Byte(0x21)])
 
 MP3_CODEC = dbus.Byte(0x01)
 # Channel Modes: Mono DualChannel Stereo JointStereo
@@ -63,9 +69,19 @@ class Rejected(dbus.DBusException):
     _dbus_error_name = "org.bluez.Error.Rejected"
 
 
+def handle_acquire(msg):
+    print("ACQUIRED", msg)
+    return args
+
+
+def handle_acquire_error(err):
+    print("ACQUIRED_ERROR", err)
+
+
 class Endpoint(dbus.service.Object):
     exit_on_release = True
     configuration = SBC_CONFIGURATION
+    capabilities = ASHA_CAPABLITIES
 
     def set_exit_on_release(self, exit_on_release):
         self.exit_on_release = exit_on_release
@@ -86,21 +102,37 @@ class Endpoint(dbus.service.Object):
         print("ClearConfiguration (%s)" % (transport))
 
     def start_copying(self, transport_dbus_path):
+        print("TRANSPORT")
         transport = dbus.Interface(bus.get_object("org.bluez", transport_dbus_path),
                                    "org.bluez.MediaTransport1")
+        print("FILEPATH")
         file_path = os.environ.get(
             'ASHA_G722_INPUT') or '/home/neena/work/asymptotic/asha-support/sounds/ikea.g722'
-        tport = transport.Acquire()
+
+        print("TPORT")
+
+        tport = 0
+        try:
+            tport = transport.Acquire(reply_handler=handle_acquire,
+                                      error_handler=handle_acquire_error)
+        except dbus.exceptions.DBusException as err:
+            print("DBusException", err)
+        except Exception as err:
+            print("Exception", err)
+
         print("Transport Acquired", transport)
-        asha_copier = AshaCopier(file_path, tport[0])
-        GObject.timeout_add(ASHA_INTERVAL_MS, asha_copier)
+        # asha_copier = AshaCopier(file_path, tport)
+        # GObject.timeout_add(ASHA_INTERVAL_MS, asha_copier)
 
     @dbus.service.method("org.bluez.MediaEndpoint1",
                          in_signature="oay", out_signature="")
     def SetConfiguration(self, transport, config):
-        pdb.set_trace()
+        # TODO Config has Codec & Configuration
+        # Use it
         print("SetConfiguration (%s, %s)" % (transport, config))
-        self.start_copying(transport)
+
+        GLib.idle_add(lambda: self.start_copying(transport))
+
         print("TRANSPORT: %s" % transport)
         print("CONFIG: %s" % config)
         return
@@ -149,7 +181,7 @@ if __name__ == '__main__':
 
     path = "/test/endpoint"
     endpoint = Endpoint(bus, path)
-    mainloop = GObject.MainLoop()
+    mainloop = GLib.MainLoop()
 
     properties = dbus.Dictionary({"UUID": A2DP_SOURCE_UUID,
                                   "Codec": SBC_CODEC,
