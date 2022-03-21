@@ -69,9 +69,9 @@ class Rejected(dbus.DBusException):
     _dbus_error_name = "org.bluez.Error.Rejected"
 
 
-def handle_acquire(msg):
-    print("ACQUIRED", msg)
-    return args
+def handle_acquire(fd, imtu, omtu):
+    print("ACQUIRED", fd, imtu, omtu)
+    return
 
 
 def handle_acquire_error(err):
