@@ -215,9 +215,6 @@ static guint resume_asha(struct media_transport *transport,
 		return 0;
 	}
 
-	// TODO Should this be in the g_idle_add call below?
-	transport_set_state(transport, TRANSPORT_STATE_REQUESTING);
-
 	struct bag *b = g_new0(struct bag, 1);
 
 	b->addr = addr;
@@ -230,6 +227,9 @@ static guint resume_asha(struct media_transport *transport,
 
 	g_idle_add(send_fd, b);
 	DBG("ASHA Transport Resume");
+
+	if (transport->state == TRANSPORT_STATE_IDLE)
+		transport_set_state(transport, TRANSPORT_STATE_REQUESTING);
 
 	return cb_id++;
 

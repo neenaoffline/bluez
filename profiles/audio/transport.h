@@ -23,6 +23,13 @@ struct media_request {
 };
 
 struct media_owner {
+	/*
+   * DBus Name Owner of a name
+   *
+   * Which 'owns' a certain media_transport
+   *
+   * And has pending media_request
+   */
 	struct media_transport *transport;
 	struct media_request *pending;
 	char *name;
