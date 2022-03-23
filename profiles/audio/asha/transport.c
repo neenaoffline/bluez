@@ -41,6 +41,16 @@ struct asha_transport {
 	struct asha *asha;
 };
 
+struct bag {
+	bdaddr_t *addr;
+	uint16_t imtu;
+	uint16_t omtu;
+	uint16_t psm;
+	struct media_owner *owner;
+	struct media_transport *transport;
+	struct asha *asha;
+};
+
 // matching what a2dp.c is doing with cb_id for now Which is, just have a new
 // incrementing int for each cb For a2dp, this is incremented each time resume
 // is called and a new cb is set up
@@ -58,7 +68,7 @@ static unsigned int cb_id = 1;
  * Looks like all behaviour is queued up for executing when the mainloop is idle
  * using g_idle_add. We shall do this as well.
  */
-static void set_mtu(int s, int mtu)
+static void set_bluetooth_mtu(int s, int mtu)
 {
 	struct l2cap_options opts = { 0 };
 	int err = 0;
@@ -85,21 +95,18 @@ static void set_mtu(int s, int mtu)
 }
 
 #define MTU 167
-static int xyz_connect(bdaddr_t *bd_addr, uint16_t psm)
+static int l2cap_connect(struct bag *b)
 {
-	char addrstr[100];
-	ba2str(bd_addr, addrstr);
-	DBG("XYZ Addr: %s", addrstr);
 	int s = socket(PF_BLUETOOTH, SOCK_SEQPACKET, BTPROTO_L2CAP);
 	int status = -1;
 
 	if (s == -1) {
-		DBG("L2CAP: Could not create a socket %u. %s (%d)\n", psm,
+		DBG("Could not create an L2CAP socket %u. %s (%d)\n", b->psm,
 		    strerror(errno), errno);
 		return -1;
 	}
 
-	DBG("L2CAP: Created socket %u\n", psm);
+	DBG("Created L2CAP socket %u\n", b->psm);
 
 	struct sockaddr_l2 addr = { 0 };
 	addr.l2_family = AF_BLUETOOTH;
@@ -111,23 +118,24 @@ static int xyz_connect(bdaddr_t *bd_addr, uint16_t psm)
 	status = bind(s, (struct sockaddr *)&addr, sizeof(addr));
 
 	if (status < 0) {
-		DBG("L2CAP: Could not bind %s\n", strerror(errno));
+		DBG("Could not bind L2CAP socket: %s\n", strerror(errno));
 		return -1;
 	}
 
-	DBG("L2CAP: socket bound\n");
+	DBG("L2CAP socket bound\n");
 
-	addr.l2_psm = htobs(psm);
-	memcpy(&addr.l2_bdaddr, bd_addr, sizeof(bdaddr_t));
-	set_mtu(s, MTU);
+	addr.l2_psm = htobs(b->psm);
+
+	memcpy(&addr.l2_bdaddr, b->addr, sizeof(bdaddr_t));
+	set_bluetooth_mtu(s, b->imtu);
 
 	status = connect(s, (struct sockaddr *)&addr, sizeof(addr));
 
 	if (status == 0) {
-		DBG("L2CAP: Connected to %u\n", psm);
+		DBG("L2CAP socket connected to PSM: %u\n", b->psm);
 	} else {
-		DBG("L2CAP: Could not connect to %u. Error %d. %d (%s)\n", psm,
-		    status, errno, strerror(errno));
+		DBG("Could not connect L2CAP socket to PSM: %u. Error %d. %d (%s)\n",
+		    b->psm, status, errno, strerror(errno));
 		return -1;
 	}
 
@@ -148,25 +156,17 @@ static void send_audio_control_point_cb(bool success, const uint8_t att_ecode,
 	DBG("Control point written: %u", att_ecode);
 }
 
-struct bag {
-	bdaddr_t *addr;
-	uint16_t imtu;
-	uint16_t omtu;
-	uint16_t psm;
-	struct media_owner *owner;
-	struct media_transport *transport;
-	struct asha *asha;
-};
-
-static gboolean send_fd(gpointer data)
+static gboolean connect_and_set_fd(gpointer data)
 {
 	gboolean ret;
 	struct bag *b = data;
 
-	int fd = xyz_connect(b->addr, b->psm);
+	int fd = l2cap_connect(b);
 	media_transport_set_fd(b->transport, fd, b->imtu, b->omtu);
 
 	struct media_request *req = b->owner->pending;
+
+	// Need to do this for media_owner_remove
 	req->id = 0;
 
 	ret = g_dbus_send_reply(btd_get_dbus_connection(), req->msg,
@@ -198,12 +198,9 @@ static guint resume_asha(struct media_transport *transport,
 		media_endpoint_get_asha_central(endpoint);
 	uint16_t psm;
 
-	char addrstr[100];
 	const bdaddr_t *addr = device_get_address(transport->device);
 	gboolean ret;
 	uint16_t imtu = MTU, omtu = MTU;
-
-	ba2str(addr, addrstr);
 
 	if (!asha_get_psm(transport->device, &psm)) {
 		DBG("Cannot read PSM");
@@ -217,7 +214,7 @@ static guint resume_asha(struct media_transport *transport,
 
 	struct bag *b = g_new0(struct bag, 1);
 
-	b->addr = addr;
+	b->addr = (bdaddr_t *)addr;
 	b->imtu = MTU;
 	b->omtu = MTU;
 	b->psm = psm;
@@ -225,7 +222,7 @@ static guint resume_asha(struct media_transport *transport,
 	b->transport = transport;
 	b->asha = asha;
 
-	g_idle_add(send_fd, b);
+	g_idle_add(connect_and_set_fd, b);
 	DBG("ASHA Transport Resume");
 
 	if (transport->state == TRANSPORT_STATE_IDLE)
@@ -299,6 +296,9 @@ static void destroy_asha(void *data)
 	g_free((struct asha_transport *)data);
 }
 
+/*
+ * Sets up the media_transport lifecycle functions with asha functions
+ */
 int asha_transport_init(struct media_transport *transport)
 {
 	struct btd_service *service;
@@ -306,11 +306,26 @@ int asha_transport_init(struct media_transport *transport)
 
 	DBG("ASHA Transport Init");
 	service = btd_device_get_service(transport->device, ASHA_SINK_UUID);
+
+	// We shouldn't have been called if the device doesn't have an ASHA service
+	// associated
 	if (service == NULL)
 		return -EINVAL;
 
 	asha_transport = g_new0(struct asha_transport, 1);
 	asha_transport->asha = btd_service_get_user_data(service);
+
+	/*
+   * NOTE
+   *
+   * We have a handle on the asha struct through asha_transport. The asha
+   * struct goes away when the device/service goes away. This means that we
+   * should terminate any transport code that accesses the asha struct when the device/service goes away.
+   *
+   * TODO Remove this note once we know this is happening.
+   *
+   * Is there a better way to structure this so the interdependency is more obvious?
+   */
 
 	transport->resume = resume_asha;
 	transport->suspend = suspend_asha;
