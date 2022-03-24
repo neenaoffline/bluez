@@ -27,6 +27,7 @@
 #include "src/shared/gatt-client.h"
 #include "profiles/audio/media.h"
 #include "profiles/audio/transport.h"
+#include "profiles/audio/asha/transport.h"
 #include "profiles/audio/asha.h"
 
 #include <bluetooth/bluetooth.h>
@@ -36,20 +37,6 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
-
-struct asha_transport {
-	struct asha *asha;
-};
-
-struct bag {
-	bdaddr_t *addr;
-	uint16_t imtu;
-	uint16_t omtu;
-	uint16_t psm;
-	struct media_owner *owner;
-	struct media_transport *transport;
-	struct asha *asha;
-};
 
 // matching what a2dp.c is doing with cb_id for now Which is, just have a new
 // incrementing int for each cb For a2dp, this is incremented each time resume
@@ -95,18 +82,18 @@ static void set_bluetooth_mtu(int s, int mtu)
 }
 
 #define MTU 167
-static int l2cap_connect(struct bag *b)
+static int l2cap_connect(struct asha_transport *t)
 {
 	int s = socket(PF_BLUETOOTH, SOCK_SEQPACKET, BTPROTO_L2CAP);
 	int status = -1;
 
 	if (s == -1) {
-		DBG("Could not create an L2CAP socket %u. %s (%d)\n", b->psm,
-		    strerror(errno), errno);
+		DBG("Could not create an L2CAP socket %u. %s (%d)\n",
+		    t->asha->psm, strerror(errno), errno);
 		return -1;
 	}
 
-	DBG("Created L2CAP socket %u\n", b->psm);
+	DBG("Created L2CAP socket %u\n", t->asha->psm);
 
 	struct sockaddr_l2 addr = { 0 };
 	addr.l2_family = AF_BLUETOOTH;
@@ -124,28 +111,45 @@ static int l2cap_connect(struct bag *b)
 
 	DBG("L2CAP socket bound\n");
 
-	addr.l2_psm = htobs(b->psm);
+	addr.l2_psm = htobs(*t->asha->psm);
 
-	memcpy(&addr.l2_bdaddr, b->addr, sizeof(bdaddr_t));
-	set_bluetooth_mtu(s, b->imtu);
+	memcpy(&addr.l2_bdaddr, t->addr, sizeof(bdaddr_t));
+	set_bluetooth_mtu(s, t->imtu);
 
 	status = connect(s, (struct sockaddr *)&addr, sizeof(addr));
 
 	if (status == 0) {
-		DBG("L2CAP socket connected to PSM: %u\n", b->psm);
+		DBG("L2CAP socket connected to PSM: %u\n", t->asha->psm);
 	} else {
 		DBG("Could not connect L2CAP socket to PSM: %u. Error %d. %d (%s)\n",
-		    b->psm, status, errno, strerror(errno));
+		    t->asha->psm, status, errno, strerror(errno));
 		return -1;
 	}
 
 	return s;
 }
 
-static void send_audio_control_point_cb(bool success, const uint8_t att_ecode,
-					void *user_data)
+static void send_audio_control_point_start_cb(bool success,
+					      const uint8_t att_ecode,
+					      void *user_data)
 {
-	struct asha *asha = user_data;
+	struct asha_transport *t = user_data;
+
+	if (!success) {
+		DBG("Writing control point failed with ATT error: %u",
+		    att_ecode);
+		return;
+	}
+
+	DBG("Control point written: %u", att_ecode);
+	transport_set_state(t->transport, TRANSPORT_STATE_REQUESTING);
+}
+
+static void send_audio_control_point_stop_cb(bool success,
+					     const uint8_t att_ecode,
+					     void *user_data)
+{
+	struct asha_transport *t = user_data;
 
 	if (!success) {
 		DBG("Writing control point failed with ATT error: %u",
@@ -159,31 +163,29 @@ static void send_audio_control_point_cb(bool success, const uint8_t att_ecode,
 static gboolean connect_and_set_fd(gpointer data)
 {
 	gboolean ret;
-	struct bag *b = data;
+	struct asha_transport *t = data;
 
-	int fd = l2cap_connect(b);
-	media_transport_set_fd(b->transport, fd, b->imtu, b->omtu);
+	int fd = l2cap_connect(t);
+	media_transport_set_fd(t->transport, fd, t->imtu, t->omtu);
 
-	struct media_request *req = b->owner->pending;
+	struct media_request *req = t->owner->pending;
 
 	// Need to do this for media_owner_remove
 	req->id = 0;
 
 	ret = g_dbus_send_reply(btd_get_dbus_connection(), req->msg,
 				DBUS_TYPE_UNIX_FD, &fd, DBUS_TYPE_UINT16,
-				&b->imtu, DBUS_TYPE_UINT16, &b->omtu,
+				&t->imtu, DBUS_TYPE_UINT16, &t->omtu,
 				DBUS_TYPE_INVALID);
 
 	if (ret == FALSE) {
-		media_transport_remove_owner(b->transport);
+		media_transport_remove_owner(t->transport);
 		return FALSE;
 	}
 
-	media_owner_remove(b->owner);
+	media_owner_remove(t->owner);
 
-	send_audio_control_point_start(b->asha, send_audio_control_point_cb);
-
-	transport_set_state(b->transport, TRANSPORT_STATE_ACTIVE);
+	send_audio_control_point_start(t, send_audio_control_point_start_cb);
 
 	return FALSE;
 }
@@ -191,11 +193,8 @@ static gboolean connect_and_set_fd(gpointer data)
 static guint resume_asha(struct media_transport *transport,
 			 struct media_owner *owner)
 {
-	struct asha_transport *asha_transport = transport->data;
-	struct asha *asha = asha_transport->asha;
+	struct asha_transport *t = transport->data;
 	struct media_endpoint *endpoint = transport->endpoint;
-	struct asha_central *asha_central =
-		media_endpoint_get_asha_central(endpoint);
 	uint16_t psm;
 
 	const bdaddr_t *addr = device_get_address(transport->device);
@@ -212,17 +211,15 @@ static guint resume_asha(struct media_transport *transport,
 		return 0;
 	}
 
-	struct bag *b = g_new0(struct bag, 1);
+	t->addr = (bdaddr_t *)addr;
+	t->imtu = MTU;
+	t->omtu = MTU;
+	// Duplicated between the asha struct and here
+	t->psm = psm;
+	t->owner = owner;
+	t->transport = transport;
 
-	b->addr = (bdaddr_t *)addr;
-	b->imtu = MTU;
-	b->omtu = MTU;
-	b->psm = psm;
-	b->owner = owner;
-	b->transport = transport;
-	b->asha = asha;
-
-	g_idle_add(connect_and_set_fd, b);
+	g_idle_add(connect_and_set_fd, t);
 	DBG("ASHA Transport Resume");
 
 	if (transport->state == TRANSPORT_STATE_IDLE)
@@ -265,15 +262,16 @@ fail:
 static guint suspend_asha(struct media_transport *transport,
 			  struct media_owner *owner)
 {
-	struct asha_transport *asha_transport = transport->data;
+	struct asha_transport *t = transport->data;
 
 	if (transport->state != TRANSPORT_STATE_ACTIVE) {
 		return 0;
 	}
 
 	close(transport->fd);
-	send_audio_control_point_stop(asha_transport->asha,
-				      send_audio_control_point_cb);
+
+	send_audio_control_point_stop(t, send_audio_control_point_stop_cb);
+
 	return 0;
 }
 
@@ -286,6 +284,11 @@ static guint suspend_asha(struct media_transport *transport,
  */
 static void cancel_asha(struct media_transport *transport, guint id)
 {
+	// TODO
+	//
+	// Once the transport actions are moved to callbacks that are stored
+	// centrally (maybe in an asha_setup structure) we should interrupt(?) them &
+	// remove them here.
 }
 
 /*
@@ -312,6 +315,8 @@ int asha_transport_init(struct media_transport *transport)
 	if (service == NULL)
 		return -EINVAL;
 
+	// Create a structure to hold information that the transport functionality
+	// requires
 	asha_transport = g_new0(struct asha_transport, 1);
 	asha_transport->asha = btd_service_get_user_data(service);
 

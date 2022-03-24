@@ -75,7 +75,7 @@ struct asha_central *asha_add_central(struct btd_adapter *adapter,
 				      int *err);
 
 gboolean asha_get_psm(struct btd_device *asha_device, uint16_t *psm);
-void send_audio_control_point_start(struct asha *asha,
+void send_audio_control_point_start(struct asha_transport *t,
 				    bt_gatt_client_callback_t callback);
-void send_audio_control_point_stop(struct asha *asha,
+void send_audio_control_point_stop(struct asha_transport *t,
 				   bt_gatt_client_callback_t callback);

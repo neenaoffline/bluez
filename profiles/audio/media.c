@@ -44,6 +44,7 @@
 #include "media.h"
 #include "transport.h"
 #include "a2dp.h"
+#include "profiles/audio/asha/transport.h"
 #include "asha.h"
 #include "avrcp.h"
 
